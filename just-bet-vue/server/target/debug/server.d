@@ -1,1 +1,1 @@
-/mnt/c/Users/klaid/Documents/programming/Just-bet/just-bet-vue/server/target/debug/server: /mnt/c/Users/klaid/Documents/programming/Just-bet/just-bet-vue/server/src/main.rs
+/Users/klaidas.p/Programming/Just-bet/just-bet-vue/server/target/debug/server: /Users/klaidas.p/Programming/Just-bet/just-bet-vue/server/src/main.rs /Users/klaidas.p/Programming/Just-bet/just-bet-vue/server/src/models/schema.rs /Users/klaidas.p/Programming/Just-bet/just-bet-vue/server/src/models/users.rs /Users/klaidas.p/Programming/Just-bet/just-bet-vue/server/src/models.rs
