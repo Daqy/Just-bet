@@ -39,8 +39,8 @@ async fn main() {
         println!("username: {}", user.username);
         println!("email: {}", user.email);
         println!("password: {}", user.password_hash);
-        println!("balance: {}", user.balance);
-        println!("expiry: {}", user.claim_expires_timestamp);
+        println!("balance: {}", user.balance.0);
+        println!("expiry: {}", user.claim_expires_timestamp.0);
     }
 
     println!("server listen on port : {}", listener.local_addr().unwrap());

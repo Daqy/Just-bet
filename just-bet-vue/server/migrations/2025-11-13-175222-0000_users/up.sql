@@ -4,6 +4,6 @@ CREATE TABLE users (
    username VARCHAR(30) NOT NULL UNIQUE,
    email TEXT NOT NULL UNIQUE,
    password_hash TEXT NOT NULL,
-   balance FLOAT NOT NULL DEFAULT 0,
-   claim_expires_timestamp INT
+   balance MONEY NOT NULL DEFAULT 0,
+   claim_expires_timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

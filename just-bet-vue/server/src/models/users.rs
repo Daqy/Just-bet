@@ -1,3 +1,4 @@
+use diesel::data_types::{PgMoney, PgTimestamp};
 use diesel::prelude::*;
 
 #[derive(Queryable, Selectable)]
@@ -9,6 +10,6 @@ pub struct User {
   pub username: String,
   pub email: String,
   pub password_hash: String,
-  pub balance: i64,
-  pub claim_expires_timestamp: i32,
+  pub balance: PgMoney,
+  pub claim_expires_timestamp: PgTimestamp,
 }
