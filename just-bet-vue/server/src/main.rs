@@ -1,12 +1,13 @@
 mod models;
+mod controllers;
 
 use axum::{Router, routing};
 use diesel::prelude::*;
 use dotenvy::dotenv;
 use std::env;
 
-
-use crate::models::users::User;
+use crate::controllers::user;
+// use crate::models::user::User;
 
 pub fn establish_connection() -> PgConnection {
     dotenv().ok();
@@ -22,26 +23,29 @@ async fn main() {
 
     let app = Router::new().nest(
         "/api",
-        Router::new().route("/hello-world", routing::get(|| async { "hello world" })),
+        Router::new()
+          .route("/hello-world", routing::get(|| async { "hello world" }))
+          .route("/login", routing::post(user::login))
+          // .with_state(pool),
     );
 
-    use self::models::schema::users::dsl::*;
-
-    let connection = &mut establish_connection();
-    let results = users
-      .limit(5)
-      .select(User::as_select())
-      .load(connection)
-      .expect("Error loading users");
-
-    println!("Displaying {} users", results.len());
-    for user in results {
-        println!("username: {}", user.username);
-        println!("email: {}", user.email);
-        println!("password: {}", user.password_hash);
-        println!("balance: {}", user.balance.0);
-        println!("expiry: {}", user.claim_expires_timestamp.0);
-    }
+    // use self::models::schema::users::dsl::*;
+    //
+    // let connection = &mut establish_connection();
+    // let results = users
+    //   .limit(5)
+    //   .select(User::as_select())
+    //   .load(connection)
+    //   .expect("Error loading users");
+    //
+    // println!("Displaying {} users", results.len());
+    // for user in results {
+    //     println!("username: {}", user.username);
+    //     println!("email: {}", user.email);
+    //     println!("password: {}", user.password_hash);
+    //     println!("balance: {}", user.balance.0);
+    //     println!("expiry: {}", user.claim_expires_timestamp.0);
+    // }
 
     println!("server listen on port : {}", listener.local_addr().unwrap());
 
