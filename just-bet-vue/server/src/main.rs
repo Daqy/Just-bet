@@ -1,54 +1,60 @@
-mod models;
 mod controllers;
+mod models;
 
+use anyhow::Ok;
 use axum::{Router, routing};
-use diesel::prelude::*;
+use diesel_async::AsyncPgConnection;
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::pooled_connection::deadpool::Pool;
 use dotenvy::dotenv;
 use std::env;
+use std::sync::Arc;
 
 use crate::controllers::user;
-// use crate::models::user::User;
 
-pub fn establish_connection() -> PgConnection {
-    dotenv().ok();
+async fn establish_connection() -> Result<Pool<AsyncPgConnection>, anyhow::Error> {
+  dotenv().ok();
+  let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    PgConnection::establish(&database_url)
-      .unwrap_or_else(|_| panic!("Error connecting to {}", database_url))
+  let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(&database_url);
+  Ok(Pool::builder(config).build()?)
 }
+
+struct AppState {
+  pool: Pool<AsyncPgConnection>,
+}
+
+// fn auth(State(state): State<A>) {
+//     ()
+// }
 
 #[tokio::main]
-async fn main() {
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+async fn main() -> Result<(), anyhow::Error> {
+  let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 
-    let app = Router::new().nest(
-        "/api",
-        Router::new()
-          .route("/hello-world", routing::get(|| async { "hello world" }))
-          .route("/login", routing::post(user::login))
-          // .with_state(pool),
-    );
+  let pool = establish_connection().await?;
 
-    // use self::models::schema::users::dsl::*;
-    //
-    // let connection = &mut establish_connection();
-    // let results = users
-    //   .limit(5)
-    //   .select(User::as_select())
-    //   .load(connection)
-    //   .expect("Error loading users");
-    //
-    // println!("Displaying {} users", results.len());
-    // for user in results {
-    //     println!("username: {}", user.username);
-    //     println!("email: {}", user.email);
-    //     println!("password: {}", user.password_hash);
-    //     println!("balance: {}", user.balance.0);
-    //     println!("expiry: {}", user.claim_expires_timestamp.0);
-    // }
+  let state = Arc::new(AppState { pool });
 
-    println!("server listen on port : {}", listener.local_addr().unwrap());
+  let app = Router::new()
+    .nest(
+      "/api",
+      Router::new()
+        .route("/hello-world", routing::get(|| async { "hello world" }))
+        .route("/login", routing::post(user::login))
+        .route("/register", routing::post(user::register)),
+      //   .layer(middleware::from_fn_with_state(
+      //     Arc::clone(&state),
+      //     auth
+      //     )),
 
-    axum::serve(listener, app).await.unwrap();
+      // .with_state(pool),
+    )
+    .with_state(state);
+
+  println!("server listen on port : {}", listener.local_addr().unwrap());
+
+  axum::serve(listener, app).await.unwrap();
+
+  Ok(())
 }
-
