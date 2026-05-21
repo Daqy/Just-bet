@@ -21,15 +21,6 @@ pub struct User {
   pub balance: PgMoney,
   pub claim_expires_timestamp: PgTimestamp,
 }
-impl User {
-  pub fn username_exist(self) -> bool {
-    !self.username.is_empty()
-  }
-
-  pub fn email_exist(self) -> bool {
-    !self.email.is_empty()
-  }
-}
 
 pub async fn user_exist_by_username(
   pool: &Pool<AsyncPgConnection>,

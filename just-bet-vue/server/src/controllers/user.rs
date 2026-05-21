@@ -121,17 +121,27 @@ pub async fn register(
           msg: "Something really went wrong".to_string(),
         }),
       )
-    })?
-    .unwrap();
+    })?;
 
-  if user_exist.username_exist() {
-    return Err((
-      StatusCode::CONFLICT,
-      Json(ErrorMessage {
-        msg: "Username already exist".to_string(),
-      }),
-    ));
+  match user_exist {
+    Some(_) => {
+      return Err((
+        StatusCode::CONFLICT,
+        Json(ErrorMessage {
+          msg: "Username already exist".to_string(),
+        }),
+      ));
+    }
+    None => {}
   }
+  // if user_exist.unwrap()  {
+  //   return Err((
+  //     StatusCode::CONFLICT,
+  //     Json(ErrorMessage {
+  //       msg: "Username already exist".to_string(),
+  //     }),
+  //   ));
+  // }
 
   let email_exist = user::user_exist_by_email(&state.pool, &input.email)
     .await
@@ -142,16 +152,18 @@ pub async fn register(
           msg: "Something really went wrong".to_string(),
         }),
       )
-    })?
-    .unwrap();
+    })?;
 
-  if email_exist.email_exist() {
-    return Err((
-      StatusCode::CONFLICT,
-      Json(ErrorMessage {
-        msg: "Email already exist".to_string(),
-      }),
-    ));
+  match email_exist {
+    Some(_) => {
+      return Err((
+        StatusCode::CONFLICT,
+        Json(ErrorMessage {
+          msg: "Email already exist".to_string(),
+        }),
+      ));
+    }
+    None => {}
   }
 
   let password = input.password;
