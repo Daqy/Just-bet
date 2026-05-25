@@ -10,6 +10,11 @@ use axum::response::{IntoResponse, Response};
 use axum_extra::extract::CookieJar;
 use axum_extra::extract::cookie::Cookie;
 
+use argon2::{
+  Argon2,
+  password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+};
+
 use chrono::Utc;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
@@ -64,7 +69,11 @@ pub async fn login(
     ))?;
 
   // todo: Pasword needs to be hashed (however, current saved one isn't hashed)
-  if user.password_hash != input.password {
+  let parsed_hash = PasswordHash::new(&user.password_hash).unwrap();
+  if Argon2::default()
+    .verify_password(&input.password.as_bytes(), &parsed_hash)
+    .is_err()
+  {
     return Err((
       StatusCode::OK,
       Json(ErrorMessage {
@@ -134,14 +143,6 @@ pub async fn register(
     }
     None => {}
   }
-  // if user_exist.unwrap()  {
-  //   return Err((
-  //     StatusCode::CONFLICT,
-  //     Json(ErrorMessage {
-  //       msg: "Username already exist".to_string(),
-  //     }),
-  //   ));
-  // }
 
   let email_exist = user::user_exist_by_email(&state.pool, &input.email)
     .await
@@ -166,15 +167,19 @@ pub async fn register(
     None => {}
   }
 
-  let password = input.password;
+  let password = input.password.as_bytes();
+  let salt = SaltString::generate(&mut OsRng);
+  let argon2 = Argon2::default();
+
+  let password_hash = argon2.hash_password(password, &salt).unwrap().to_string();
 
   let user = user::create_user(
     &state.pool,
     user::User {
-      id: 1,
+      id: 2,
       username: input.username,
       email: input.email,
-      password_hash: password,
+      password_hash: password_hash,
       balance: diesel::data_types::PgMoney(100),
       claim_expires_timestamp: diesel::data_types::PgTimestamp(Utc::now().timestamp()),
     },
