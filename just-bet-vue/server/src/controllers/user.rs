@@ -95,7 +95,7 @@ pub async fn login(
   )
   .unwrap();
 
-  let cookie = Cookie::build(("TOKEN", token))
+  let cookie = Cookie::build(("token", token))
     .path("/")
     .secure(true)
     .http_only(true)
@@ -211,7 +211,7 @@ pub async fn register(
   )
   .unwrap();
 
-  let cookie = Cookie::build(("TOKEN", token))
+  let cookie = Cookie::build(("token", token))
     .path("/")
     .secure(true)
     .http_only(true)
