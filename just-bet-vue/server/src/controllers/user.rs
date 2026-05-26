@@ -19,6 +19,7 @@ use chrono::Utc;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use snowflaked::Generator;
 #[derive(Serialize, Deserialize)]
 pub struct LoginUser {
   username: String,
@@ -173,10 +174,12 @@ pub async fn register(
 
   let password_hash = argon2.hash_password(password, &salt).unwrap().to_string();
 
+  let mut generator = Generator::new(0);
+
   let user = user::create_user(
     &state.pool,
     user::User {
-      id: 2,
+      id: generator.generate(),
       username: input.username,
       email: input.email,
       password_hash: password_hash,

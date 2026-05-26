@@ -16,3 +16,4 @@ anyhow = "1.0.102"
 chrono = "0.4.44"
 argon2 = { version = "0.5", features = ["std"] }
 axum-extra = {version = "0.9", default-features = false, features = ["cookie"]}
+snowflaked = "1.0.3"
