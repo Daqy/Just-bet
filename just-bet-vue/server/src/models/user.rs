@@ -13,6 +13,7 @@ use diesel_async::{AsyncPgConnection, RunQueryDsl};
 #[diesel(table_name = crate::models::schema::users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct User {
   pub id: i64,
   pub username: String,
@@ -43,6 +44,20 @@ pub async fn user_exist_by_email(
   Ok(
     users::table
       .filter(users::email.eq(email))
+      .select(User::as_select())
+      .first(&mut pool.get().await.unwrap())
+      .await
+      .optional()?,
+  )
+}
+
+pub async fn user_exist_by_id(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+) -> Result<Option<User>, diesel::result::Error> {
+  Ok(
+    users::table
+      .filter(users::id.eq(id))
       .select(User::as_select())
       .first(&mut pool.get().await.unwrap())
       .await

@@ -3,7 +3,7 @@ mod models;
 
 use crate::controllers::user;
 use anyhow::Ok;
-use axum::{Router, routing};
+use axum::{Router, middleware, routing};
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::pooled_connection::deadpool::Pool;
@@ -25,10 +25,6 @@ struct AppState {
   pool: Pool<AsyncPgConnection>,
 }
 
-// fn auth(State(state): State<A>) {
-//     ()
-// }
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
   let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -37,6 +33,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
   let state = Arc::new(AppState { pool });
 
+  let auth_routes = Router::new()
+    .route("/get-user", routing::get(user::get))
+    .layer(middleware::from_fn_with_state(
+      Arc::clone(&state),
+      user::verify,
+    ));
+
   let app = Router::new()
     .nest(
       "/api",
@@ -44,11 +47,8 @@ async fn main() -> Result<(), anyhow::Error> {
         .route("/hello-world", routing::get(|| async { "hello world" }))
         .route("/login", routing::post(user::login))
         .route("/register", routing::post(user::register))
-        //   .layer(middleware::from_fn_with_state(
-        //     Arc::clone(&state),
-        //     auth
-        //     )),
         // .with_state(pool),
+        .merge(auth_routes)
         .with_state(state),
     )
     .layer(
