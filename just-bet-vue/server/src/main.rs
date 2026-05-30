@@ -34,6 +34,7 @@ async fn main() -> Result<(), anyhow::Error> {
   let state = Arc::new(AppState { pool });
 
   let auth_routes = Router::new()
+    .route("/auth", routing::post(user::auth))
     .route("/get-user", routing::get(user::get))
     .layer(middleware::from_fn_with_state(
       Arc::clone(&state),

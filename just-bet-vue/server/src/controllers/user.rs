@@ -288,7 +288,6 @@ pub struct UserResponse {
 #[axum::debug_handler]
 pub async fn get(
   State(_state): State<Arc<AppState>>,
-  _cookies: CookieJar,
   Extension(user): Extension<user::User>,
 ) -> Result<(StatusCode, Json<UserResponse>), (StatusCode, ErrorMessage)> {
   Ok((
@@ -298,4 +297,10 @@ pub async fn get(
       balance: user.balance.0,
     }),
   ))
+}
+
+pub async fn auth(
+  cookies: CookieJar,
+) -> Result<(StatusCode, CookieJar), (StatusCode, ErrorMessage)> {
+  Ok((StatusCode::OK, cookies))
 }
