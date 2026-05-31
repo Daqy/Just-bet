@@ -33,7 +33,7 @@ impl IntoResponse for LoginUser {
 
 #[derive(Serialize, Deserialize)]
 pub struct ErrorMessage {
-  msg: String,
+  pub msg: String,
 }
 impl IntoResponse for ErrorMessage {
   fn into_response(self) -> Response {
@@ -178,7 +178,7 @@ pub async fn register(
 
   let user = user::create_user(
     &state.pool,
-    user::User {
+    &user::User {
       id: generator.generate(),
       username: input.username,
       email: input.email,
@@ -258,7 +258,7 @@ pub async fn verify(
     .parse::<i64>()
     .unwrap();
 
-  let user = user::user_exist_by_id(&state.pool, user_id)
+  let user = user::user_exist_by_id(&state.pool, &user_id)
     .await
     .map_err(|_| {
       (

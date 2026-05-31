@@ -53,7 +53,7 @@ pub async fn user_exist_by_email(
 
 pub async fn user_exist_by_id(
   pool: &Pool<AsyncPgConnection>,
-  id: i64,
+  id: &i64,
 ) -> Result<Option<User>, diesel::result::Error> {
   Ok(
     users::table
@@ -77,7 +77,7 @@ struct NewUser<'a> {
 }
 pub async fn create_user(
   pool: &Pool<AsyncPgConnection>,
-  user: User,
+  user: &User,
 ) -> Result<Vec<User>, diesel::result::Error> {
   Ok(
     diesel::insert_into(users::table)
