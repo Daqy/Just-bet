@@ -1,7 +1,7 @@
 mod controllers;
 mod models;
 
-use crate::controllers::user;
+use crate::controllers::{games::minesweeper, user};
 use anyhow::Ok;
 use axum::{Router, middleware, routing};
 use diesel_async::AsyncPgConnection;
@@ -36,6 +36,7 @@ async fn main() -> Result<(), anyhow::Error> {
   let auth_routes = Router::new()
     .route("/auth", routing::post(user::auth))
     .route("/get-user", routing::get(user::get))
+    .route("/latest-game", routing::get(minesweeper::get))
     .layer(middleware::from_fn_with_state(
       Arc::clone(&state),
       user::verify,
