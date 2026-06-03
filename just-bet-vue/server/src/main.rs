@@ -36,7 +36,8 @@ async fn main() -> Result<(), anyhow::Error> {
   let auth_routes = Router::new()
     .route("/auth", routing::post(user::auth))
     .route("/get-user", routing::get(user::get))
-    .route("/latest-game", routing::get(minesweeper::get))
+    .route("/game/:id", routing::get(minesweeper::get))
+    .route("/latest-game", routing::get(minesweeper::get_latest))
     .route("/create-game", routing::post(minesweeper::create))
     .layer(middleware::from_fn_with_state(
       Arc::clone(&state),
