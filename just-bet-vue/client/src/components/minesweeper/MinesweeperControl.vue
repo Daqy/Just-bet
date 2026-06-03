@@ -48,7 +48,7 @@ function createGame() {
   error.value = undefined
 
   post({
-    bombCount: bombMultipliers[activeMultiplier.value],
+    bomb_count: bombMultipliers[activeMultiplier.value],
     stake: betAmount.value
   }).then((response: any) => {
     const balanceUpdate = useApi('/api/balance')

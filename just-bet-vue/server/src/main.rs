@@ -37,6 +37,7 @@ async fn main() -> Result<(), anyhow::Error> {
     .route("/auth", routing::post(user::auth))
     .route("/get-user", routing::get(user::get))
     .route("/latest-game", routing::get(minesweeper::get))
+    .route("/create-game", routing::post(minesweeper::create))
     .layer(middleware::from_fn_with_state(
       Arc::clone(&state),
       user::verify,
