@@ -14,7 +14,8 @@ import { routerPathPrettify } from '@/services/routerPathPrettify'
 import { socket } from '@/socket'
 const { loading, get } = useApi('/api/get-user')
 
-socket.connect()
+// disable sockets to prevent spam, as endpoint does not have the current url.
+// socket.connect()
 
 const authStore = useAuthStore()
 
