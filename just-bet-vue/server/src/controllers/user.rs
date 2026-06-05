@@ -288,7 +288,7 @@ pub struct UserResponse {
 pub async fn get(
   State(_state): State<Arc<AppState>>,
   Extension(user): Extension<user::User>,
-) -> Result<(StatusCode, Json<UserResponse>), (StatusCode, ErrorMessage)> {
+) -> Result<(StatusCode, Json<UserResponse>), (StatusCode, Json<ErrorMessage>)> {
   Ok((
     StatusCode::OK,
     Json(UserResponse {
@@ -298,8 +298,31 @@ pub async fn get(
   ))
 }
 
+#[axum::debug_handler]
 pub async fn auth(
   cookies: CookieJar,
-) -> Result<(StatusCode, CookieJar), (StatusCode, ErrorMessage)> {
+) -> Result<(StatusCode, CookieJar), (StatusCode, Json<ErrorMessage>)> {
   Ok((StatusCode::OK, cookies))
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Balance {
+  balance: i64,
+}
+impl IntoResponse for Balance {
+  fn into_response(self) -> Response {
+    Json(json!(&self)).into_response()
+  }
+}
+
+#[axum::debug_handler]
+pub async fn get_balance(
+  Extension(user): Extension<user::User>,
+) -> Result<(StatusCode, Balance), (StatusCode, Json<ErrorMessage>)> {
+  Ok((
+    StatusCode::OK,
+    Balance {
+      balance: user.balance.0,
+    },
+  ))
 }

@@ -36,6 +36,7 @@ async fn main() -> Result<(), anyhow::Error> {
   let auth_routes = Router::new()
     .route("/auth", routing::post(user::auth))
     .route("/get-user", routing::get(user::get))
+    .route("/get-balance", routing::get(user::get_balance))
     .route("/game/:id", routing::get(minesweeper::get))
     .route("/latest-game", routing::get(minesweeper::get_latest))
     .route("/create-game", routing::post(minesweeper::create))
