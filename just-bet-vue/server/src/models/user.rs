@@ -2,6 +2,7 @@ use diesel::{
   ExpressionMethods, OptionalExtension, QueryDsl, Queryable, Selectable, SelectableHelper,
   data_types::{PgMoney, PgTimestamp},
   prelude::Insertable,
+  query_builder::AsChangeset,
 };
 // use diesel::prelude::*;
 
@@ -92,5 +93,28 @@ pub async fn create_user(
       .returning(User::as_returning())
       .get_results(&mut pool.get().await.unwrap())
       .await?,
+  )
+}
+
+#[derive(AsChangeset)]
+#[diesel(table_name = users)]
+pub struct UpdateBalance {
+  pub balance: Option<PgMoney>,
+}
+
+pub async fn update_balance(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+  balance: Option<PgMoney>,
+) -> Result<User, diesel::result::Error> {
+  Ok(
+    diesel::update(users::table)
+      .filter(users::id.eq(id))
+      .set(&UpdateBalance { balance: balance })
+      .returning(User::as_returning())
+      .get_results(&mut pool.get().await.unwrap())
+      .await?
+      .pop()
+      .unwrap(),
   )
 }

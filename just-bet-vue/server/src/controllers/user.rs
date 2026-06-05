@@ -183,7 +183,7 @@ pub async fn register(
       username: input.username,
       email: input.email,
       password_hash: password_hash,
-      balance: diesel::data_types::PgMoney(100),
+      balance: diesel::data_types::PgMoney(10000), // £100
       claim_expires_timestamp: diesel::data_types::PgTimestamp(Utc::now().timestamp()),
     },
   )

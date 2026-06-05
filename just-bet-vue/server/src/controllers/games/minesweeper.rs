@@ -260,6 +260,17 @@ pub async fn create(
       )
     })?;
 
+  user::update_balance(&state.pool, user.id, Some(PgMoney(input.stake * 100)))
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?;
+
   Ok((StatusCode::OK, Json(CreateGameResponse { gameid: game.id })))
 }
 
