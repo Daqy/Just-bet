@@ -39,6 +39,10 @@ async fn main() -> Result<(), anyhow::Error> {
     .route("/game/:id", routing::get(minesweeper::get))
     .route("/latest-game", routing::get(minesweeper::get_latest))
     .route("/create-game", routing::post(minesweeper::create))
+    .route(
+      "/game/minesweeper/:id/click",
+      routing::get(minesweeper::click),
+    )
     .layer(middleware::from_fn_with_state(
       Arc::clone(&state),
       user::verify,

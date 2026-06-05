@@ -46,7 +46,7 @@ socket.on('games', (games) => {
 })
 
 socket.on('user-joined', async ({ game }) => {
-  const { get } = useApi(`/api/game/${game._id}`)
+  const { get } = useApi(`/api/game/${game.id}`)
 
   get().then((response) => {
     state.game = response
@@ -71,7 +71,7 @@ socket.on('user-has-won', async () => {
 })
 
 socket.on('board-click', async ({ game }) => {
-  const { get } = useApi(`/api/game/${game._id}`)
+  const { get } = useApi(`/api/game/${game.id}`)
 
   get().then((response) => {
     state.game = response

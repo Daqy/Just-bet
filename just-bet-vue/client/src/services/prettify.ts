@@ -1,5 +1,7 @@
 export const prettify = (value: number) => {
   if (!value) return 0
+  // data stored on server are now in cents rather than ££
+  value /= 100
   if (value >= 10) {
     return truncate(value, 0)
       .toString()

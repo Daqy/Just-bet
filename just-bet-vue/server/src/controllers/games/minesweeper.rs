@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use axum::{
   Extension, Json,
-  extract::{Path, State},
+  extract::{Path, Query, State},
   http::StatusCode,
   response::{IntoResponse, Response},
 };
@@ -15,7 +15,7 @@ use crate::{
   AppState,
   controllers::user::ErrorMessage,
   models::{
-    minesweeper::{self, NewBomb},
+    minesweeper::{self, Click, NewBomb, UpdateGame},
     user,
   },
 };
@@ -33,6 +33,7 @@ pub struct MinesweeperClick {
 }
 #[derive(Serialize, Deserialize)]
 pub struct MinesweeperGame {
+  pub id: String,
   pub state: String,
   pub result: String,
   pub stake: i64,
@@ -116,12 +117,13 @@ pub async fn get_latest(
   Ok((
     StatusCode::OK,
     MinesweeperGame {
+      id: game.id.to_string(),
       state: game.state,
       result: game.result,
       stake: game.stake.0,
       pool: game.pool.0,
       bomb: response_bombs,
-      size: 25,
+      size: CONSTANTS.game_size,
       clicks: match clicks {
         Some(value) => value
           .iter()
@@ -154,6 +156,7 @@ struct Constants<'a> {
   ongoing: &'a str,
   awaiting: &'a str,
   prep: &'a str,
+  game_size: i64,
 }
 
 const CONSTANTS: Constants = {
@@ -164,6 +167,7 @@ const CONSTANTS: Constants = {
     ongoing: "ongoing",
     awaiting: "awaiting",
     prep: "prep",
+    game_size: 25,
   }
 };
 
@@ -234,7 +238,7 @@ pub async fn create(
   let mut bombs: Vec<NewBomb> = Vec::new();
 
   while (bombs.len() as i64) < input.bomb_count {
-    let rand = rand::random_range(1..25);
+    let rand = rand::random_range(1..CONSTANTS.game_size);
     if bombs.iter().any(|&bomb| bomb.position == rand) {
       continue;
     }
@@ -297,9 +301,9 @@ pub async fn get(
 
   if game.belongs_to != user.id {
     return Err((
-      StatusCode::NOT_FOUND,
+      StatusCode::UNAUTHORIZED,
       Json(ErrorMessage {
-        msg: "Game does not exist".to_string(),
+        msg: "Don't have access to this game".to_string(),
       }),
     ));
   }
@@ -350,12 +354,13 @@ pub async fn get(
   Ok((
     StatusCode::OK,
     MinesweeperGame {
+      id: game.id.to_string(),
       state: game.state,
       result: game.result,
       stake: game.stake.0,
       pool: game.pool.0,
       bomb: response_bombs,
-      size: 25,
+      size: CONSTANTS.game_size,
       clicks: match clicks {
         Some(value) => value
           .iter()
@@ -368,4 +373,242 @@ pub async fn get(
       },
     },
   ))
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ClickQuery {
+  pub click_position: Option<i64>,
+}
+pub async fn click(
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+  Path(params): Path<GameParameters>,
+  query: Query<ClickQuery>,
+) -> Result<(StatusCode, MinesweeperGame), (StatusCode, Json<ErrorMessage>)> {
+  let id = params.id.ok_or((
+    StatusCode::FORBIDDEN,
+    Json(ErrorMessage {
+      msg: "Game ID must be provided".to_string(),
+    }),
+  ))?;
+
+  let click_position = query.click_position.ok_or((
+    StatusCode::FORBIDDEN,
+    Json(ErrorMessage {
+      msg: "Click position must be provided".to_string(),
+    }),
+  ))?;
+
+  let game = minesweeper::get_game_by_id(&state.pool, id)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::NOT_FOUND,
+      Json(ErrorMessage {
+        msg: "Game does not exist".to_string(),
+      }),
+    ))?;
+
+  if game.belongs_to != user.id {
+    return Err((
+      StatusCode::UNAUTHORIZED,
+      Json(ErrorMessage {
+        msg: "Don't have access to this game".to_string(),
+      }),
+    ));
+  }
+
+  if game.state == CONSTANTS.done {
+    return Err((
+      StatusCode::BAD_REQUEST,
+      Json(ErrorMessage {
+        msg: "Game has finished".to_string(),
+      }),
+    ));
+  }
+
+  let clicks = minesweeper::get_clicks_by_game(&state.pool, &game)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?;
+
+  let clicks = match clicks {
+    Some(clicks) => {
+      let click_positions: Vec<i64> = clicks.iter().map(|click| click.position).collect();
+
+      if click_positions.contains(&click_position) {
+        return Err((
+          StatusCode::NOT_FOUND,
+          Json(ErrorMessage {
+            msg: "Square has already been clicked".to_string(),
+          }),
+        ));
+      }
+
+      clicks
+    }
+    None => Vec::new(),
+  };
+
+  let bombs: Vec<i64> = minesweeper::get_bombs_by_game(&state.pool, &game)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "Game wasn't craeted correctly".to_string(),
+      }),
+    ))?
+    .iter()
+    .map(|bomb| bomb.position)
+    .collect();
+
+  let chance_of_winning = get_percentage_of_wining(
+    CONSTANTS.game_size as f64,
+    (clicks.len() as i64) + 1,
+    bombs.len() as f64,
+  );
+  let pool = (1.0 / chance_of_winning) * ((game.stake.0 as f64) / 100.0);
+  let earned = ((pool - ((game.pool.0 as f64) / 100.0)) * 100.0) as i64;
+
+  let mut generator = Generator::new(0);
+
+  let clicks = minesweeper::create_click_for_game(
+    &state.pool,
+    &Click {
+      id: generator.generate(),
+      belongs_to: game.id,
+      position: click_position,
+      earned: PgMoney(earned),
+    },
+  )
+  .await
+  .map_err(|_| {
+    (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "Something really went wrong".to_string(),
+      }),
+    )
+  })?;
+
+  let response_game: minesweeper::Minesweeper = if bombs.contains(&click_position) {
+    minesweeper::update_game(
+      &state.pool,
+      game.id,
+      &UpdateGame {
+        state: Some(CONSTANTS.done.to_string()),
+        result: Some(CONSTANTS.lost.to_string()),
+        pool: None,
+      },
+    )
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+  } else if clicks.len() as i64 == CONSTANTS.game_size - (bombs.len() as i64) {
+    minesweeper::update_game(
+      &state.pool,
+      game.id,
+      &UpdateGame {
+        state: Some(CONSTANTS.done.to_string()),
+        result: Some(CONSTANTS.claimed.to_string()),
+        pool: Some(PgMoney((pool * 100.0) as i64)),
+      },
+    )
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+  } else {
+    minesweeper::update_game(
+      &state.pool,
+      game.id,
+      &UpdateGame {
+        state: None,
+        result: None,
+        pool: Some(PgMoney((pool * 100.0) as i64)),
+      },
+    )
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+  };
+
+  let response_bombs: MinesweeperBombs = if response_game.state == CONSTANTS.done {
+    MinesweeperBombs {
+      count: bombs.len() as i64,
+      position: bombs,
+    }
+  } else {
+    MinesweeperBombs {
+      count: bombs.len() as i64,
+      position: Vec::new(),
+    }
+  };
+
+  Ok((
+    StatusCode::OK,
+    MinesweeperGame {
+      id: response_game.id.to_string(),
+      state: response_game.state,
+      result: response_game.result,
+      stake: response_game.stake.0,
+      pool: response_game.pool.0,
+      bomb: response_bombs,
+      size: CONSTANTS.game_size,
+      clicks: clicks
+        .iter()
+        .map(|click| MinesweeperClick {
+          earned: click.earned.0,
+          position: click.position,
+        })
+        .collect(),
+    },
+  ))
+}
+
+fn get_percentage_of_wining(size: f64, next_click_count: i64, bomb_count: f64) -> f64 {
+  let mut total: f64 = 1.0;
+
+  for index in 0..next_click_count {
+    total *= (size - bomb_count - (index as f64)) / (size - (index as f64));
+  }
+  total
 }

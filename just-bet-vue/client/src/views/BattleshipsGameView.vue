@@ -209,9 +209,9 @@ const handleBoardClick = (id: number) => {
   if (!data.value) return
   if (!data.value.turn || data.value.state === 'done') return
 
-  socket.emit('board-click', { id: data.value._id, clickNumber: id, token: authStore.token })
+  socket.emit('board-click', { id: data.value.id, clickNumber: id, token: authStore.token })
 
-  // const { post } = useApi(`/api/game/battleships/${data.value._id}/click`)
+  // const { post } = useApi(`/api/game/battleships/${data.value.id}/click`)
   // post({ id }).then((response) => {
   //   if (response.state === 'done') {
   //     // game finished

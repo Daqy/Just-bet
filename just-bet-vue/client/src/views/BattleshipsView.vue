@@ -15,7 +15,7 @@ latestGame
   .get()
   .then((response) => {
     if (response.state !== 'done') {
-      router.push(`/battleships/${response._id}`)
+      router.push(`/battleships/${response.id}`)
     }
   })
   .catch((error) => {})
@@ -48,7 +48,7 @@ const joinGame = (gameid) => {
               <h2 class="heading">Bet amount</h2>
               <p>${{ game.stake }}</p>
             </div>
-            <button class="button" @click="joinGame(game._id)">join</button>
+            <button class="button" @click="joinGame(game.id)">join</button>
           </div>
         </template>
         <div class="no-games" v-else>

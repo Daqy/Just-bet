@@ -2,7 +2,7 @@ import { mockToken } from '@/mock'
 
 export const game = {
   LOST: {
-    _id: '123isadfin12nxaowdo1',
+    id: '123isadfin12nxaowdo1',
     belognsTo: 'test',
     state: 'done',
     size: 25,

@@ -4,12 +4,13 @@ use diesel::{
   associations::{Associations, Identifiable},
   data_types::PgMoney,
   prelude::Insertable,
+  query_builder::AsChangeset,
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Pool};
 
 use crate::models::schema::{
   bombs::{self},
-  minesweeper,
+  clicks, minesweeper,
 };
 
 #[derive(Identifiable, Debug, Queryable, Selectable)]
@@ -55,6 +56,20 @@ pub async fn get_game_by_user_id(
   Ok(
     minesweeper::table
       .filter(minesweeper::belongs_to.eq(id))
+      .select(Minesweeper::as_select())
+      .first(&mut pool.get().await.unwrap())
+      .await
+      .optional()?,
+  )
+}
+
+pub async fn get_game_by_id(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+) -> Result<Option<Minesweeper>, diesel::result::Error> {
+  Ok(
+    minesweeper::table
+      .filter(minesweeper::id.eq(id))
       .select(Minesweeper::as_select())
       .first(&mut pool.get().await.unwrap())
       .await
@@ -137,5 +152,67 @@ pub async fn create_bomb_for_game<'a>(
       .returning(Bomb::as_returning())
       .get_results(&mut pool.get().await.unwrap())
       .await?,
+  )
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = clicks)]
+struct NewClick<'a> {
+  id: &'a i64,
+  belongs_to: &'a i64,
+  position: &'a i64,
+  earned: &'a PgMoney,
+}
+
+pub async fn create_click_for_game(
+  pool: &Pool<AsyncPgConnection>,
+  click: &Click,
+) -> Result<Vec<Click>, diesel::result::Error> {
+  Ok(
+    diesel::insert_into(clicks::table)
+      .values(&NewClick {
+        id: &click.id,
+        belongs_to: &click.belongs_to,
+        position: &click.position,
+        earned: &click.earned,
+      })
+      .returning(Click::as_returning())
+      .get_results(&mut pool.get().await.unwrap())
+      .await?,
+  )
+}
+
+#[derive(AsChangeset)]
+#[diesel(table_name = minesweeper)]
+pub struct SetGame<'a> {
+  pub state: Option<&'a String>,
+  pub result: Option<&'a String>,
+  pub pool: Option<PgMoney>,
+}
+
+pub struct UpdateGame {
+  pub state: Option<String>,
+  pub result: Option<String>,
+  pub pool: Option<PgMoney>,
+}
+
+pub async fn update_game(
+  pool: &Pool<AsyncPgConnection>,
+  game_id: i64,
+  game: &UpdateGame,
+) -> Result<Minesweeper, diesel::result::Error> {
+  Ok(
+    diesel::update(minesweeper::table)
+      .filter(minesweeper::id.eq(game_id))
+      .set(&SetGame {
+        state: game.state.as_ref(),
+        result: game.result.as_ref(),
+        pool: game.pool,
+      })
+      .returning(Minesweeper::as_returning())
+      .get_results(&mut pool.get().await.unwrap())
+      .await?
+      .pop()
+      .unwrap(),
   )
 }
