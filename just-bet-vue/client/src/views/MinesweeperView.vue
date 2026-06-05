@@ -104,12 +104,10 @@ function claimRewards() {
     get().then((res: any) => {
       gameStore.game.bomb.position = res
     })
-    const balanceUpdate = useApi('/api/balance')
-    balanceUpdate
-      .post({ gameid: response.id, balance: response.pool })
-      .then((res: { balance: number }) => {
-        authStore.balance = res.balance
-      })
+    const balanceUpdate = useApi('/api/get-balance')
+    balanceUpdate.get().then((res: { balance: number }) => {
+      authStore.balance = res.balance
+    })
   })
 }
 </script>
