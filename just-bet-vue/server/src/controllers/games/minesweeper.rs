@@ -465,7 +465,7 @@ pub async fn click(
       )
     })?;
 
-  let clicks = match clicks {
+  let mut clicks = match clicks {
     Some(clicks) => {
       let click_positions: Vec<i64> = clicks.iter().map(|click| click.position).collect();
 
@@ -513,7 +513,7 @@ pub async fn click(
 
   let mut generator = Generator::new(0);
 
-  let clicks = minesweeper::create_click_for_game(
+  let click = minesweeper::create_click_for_game(
     &state.pool,
     &Click {
       id: generator.generate(),
@@ -530,7 +530,9 @@ pub async fn click(
         msg: "Something really went wrong".to_string(),
       }),
     )
-  })?;
+  })?[0];
+
+  clicks.push(click);
 
   let response_game: minesweeper::Minesweeper = if bombs.contains(&click_position) {
     minesweeper::update_game(

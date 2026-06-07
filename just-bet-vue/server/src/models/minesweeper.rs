@@ -37,7 +37,7 @@ pub struct Bomb {
   pub position: i64,
 }
 
-#[derive(Identifiable, Debug, Queryable, Selectable, Associations)]
+#[derive(Identifiable, Debug, Queryable, Selectable, Associations, Clone, Copy)]
 #[diesel(belongs_to(Minesweeper, foreign_key = belongs_to))]
 #[diesel(table_name = crate::models::schema::clicks)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
