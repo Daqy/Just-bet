@@ -11,7 +11,7 @@
               </template>
               <component :is="Component" :key="$route.path" />
             </AppCard>
-            <footer v-if="authStore.token">
+            <footer v-if="authStore.username">
               <AppFooter />
             </footer>
           </div>

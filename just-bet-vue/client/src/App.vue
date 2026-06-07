@@ -42,18 +42,18 @@ const heading = computed(() => {
   <div class="container">
     <div class="top-container">
       <AppLogo title="Just bet" />
-      <AppClaim v-if="authStore.token" />
+      <AppClaim v-if="authStore.username" />
     </div>
     <AppCard :heading="heading">
       <template #icon>
         <component :is="Icons[heading.toLowerCase()]" />
       </template>
-      <template #extra v-if="authStore.token">
+      <template #extra v-if="authStore.balance">
         <AppBalance :loading="loading" />
       </template>
       <RouterView />
     </AppCard>
-    <footer v-if="authStore.token">
+    <footer v-if="authStore.username">
       <AppFooter :loading="loading" />
     </footer>
   </div>
