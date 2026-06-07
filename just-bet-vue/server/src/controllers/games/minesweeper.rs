@@ -263,7 +263,7 @@ pub async fn create(
   user::update_balance(
     &state.pool,
     user.id,
-    Some(user.balance + PgMoney(input.stake * 100)),
+    Some(user.balance - PgMoney(input.stake * 100)),
   )
   .await
   .map_err(|_| {

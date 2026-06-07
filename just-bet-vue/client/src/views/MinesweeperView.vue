@@ -149,7 +149,7 @@ function claimRewards() {
               v-if="gameStore.game?.state === 'done' && gameStore.game?.result === 'lost'"
               style="color: var(--color-bomb-background)"
             >
-              You lost a pontential: ${{ prettify(gameStore.game?.pool) }}
+              You lost: ${{ prettify(gameStore.game?.pool) }}
               <AppCopyGameOutput />
             </p>
             <AppSkeletonLoader v-if="!gameStore.game" height="100%" />
