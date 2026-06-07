@@ -5,5 +5,6 @@ CREATE TABLE minesweeper (
    state VARCHAR(30) NOT NULL,
    result VARCHAR(30) NOT NULL,
    stake MONEY NOT NULL,
-   pool MONEY NOT NULL
+   pool MONEY NOT NULL,
+   created TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

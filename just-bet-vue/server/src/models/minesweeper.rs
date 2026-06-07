@@ -57,6 +57,7 @@ pub async fn get_game_by_user_id(
     minesweeper::table
       .filter(minesweeper::belongs_to.eq(id))
       .select(Minesweeper::as_select())
+      .order_by(minesweeper::created.desc())
       .first(&mut pool.get().await.unwrap())
       .await
       .optional()?,
@@ -71,6 +72,7 @@ pub async fn get_game_by_id(
     minesweeper::table
       .filter(minesweeper::id.eq(id))
       .select(Minesweeper::as_select())
+      .order_by(minesweeper::created.desc())
       .first(&mut pool.get().await.unwrap())
       .await
       .optional()?,

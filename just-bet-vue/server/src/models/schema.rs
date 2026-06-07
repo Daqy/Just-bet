@@ -27,6 +27,7 @@ diesel::table! {
         result -> Varchar,
         stake -> Money,
         pool -> Money,
+        created -> Timestamptz,
     }
 }
 
