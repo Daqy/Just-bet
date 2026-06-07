@@ -173,7 +173,7 @@ const CONSTANTS: Constants = {
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateGameResponse {
-  pub gameid: i64,
+  pub gameid: String,
 }
 impl IntoResponse for CreateGameResponse {
   fn into_response(self) -> Response {
@@ -260,18 +260,27 @@ pub async fn create(
       )
     })?;
 
-  user::update_balance(&state.pool, user.id, Some(PgMoney(input.stake * 100)))
-    .await
-    .map_err(|_| {
-      (
-        StatusCode::INTERNAL_SERVER_ERROR,
-        Json(ErrorMessage {
-          msg: "Something really went wrong".to_string(),
-        }),
-      )
-    })?;
+  user::update_balance(
+    &state.pool,
+    user.id,
+    Some(user.balance + PgMoney(input.stake * 100)),
+  )
+  .await
+  .map_err(|_| {
+    (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "Something really went wrong".to_string(),
+      }),
+    )
+  })?;
 
-  Ok((StatusCode::OK, Json(CreateGameResponse { gameid: game.id })))
+  Ok((
+    StatusCode::OK,
+    Json(CreateGameResponse {
+      gameid: game.id.to_string(),
+    }),
+  ))
 }
 
 #[derive(Deserialize, Debug)]
@@ -622,4 +631,151 @@ fn get_percentage_of_wining(size: f64, next_click_count: i64, bomb_count: f64) -
     total *= (size - bomb_count - (index as f64)) / (size - (index as f64));
   }
   total
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ClaimGame {
+  pub gameid: String,
+}
+
+pub async fn claim(
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+  Json(input): Json<ClaimGame>,
+) -> Result<(StatusCode, MinesweeperGame), (StatusCode, Json<ErrorMessage>)> {
+  let gameid = input.gameid.parse::<i64>().unwrap();
+
+  let game = minesweeper::get_game_by_id(&state.pool, gameid)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::NOT_FOUND,
+      Json(ErrorMessage {
+        msg: "game does not exist".to_string(),
+      }),
+    ))?;
+
+  if game.belongs_to != user.id {
+    return Err((
+      StatusCode::UNAUTHORIZED,
+      Json(ErrorMessage {
+        msg: "Unathorised access to game".to_string(),
+      }),
+    ));
+  }
+
+  if game.state == CONSTANTS.done.to_string() {
+    return Err((
+      StatusCode::BAD_REQUEST,
+      Json(ErrorMessage {
+        msg: "Game has already been claimed or lost".to_string(),
+      }),
+    ));
+  }
+
+  let clicks = minesweeper::get_clicks_by_game(&state.pool, &game)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::BAD_REQUEST,
+      Json(ErrorMessage {
+        msg: "Must click at least once to claim".to_string(),
+      }),
+    ))?;
+
+  if clicks.len() < 1 {
+    return Err((
+      StatusCode::BAD_REQUEST,
+      Json(ErrorMessage {
+        msg: "Must click at least once to claim".to_string(),
+      }),
+    ));
+  }
+
+  let response_game = minesweeper::update_game(
+    &state.pool,
+    gameid,
+    &UpdateGame {
+      state: Some(CONSTANTS.done.to_string()),
+      result: Some(CONSTANTS.claimed.to_string()),
+      pool: None,
+    },
+  )
+  .await
+  .map_err(|_| {
+    (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "Something really went wrong".to_string(),
+      }),
+    )
+  })?;
+
+  let bombs: Vec<i64> = minesweeper::get_bombs_by_game(&state.pool, &game)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "Game wasn't craeted correctly".to_string(),
+      }),
+    ))?
+    .iter()
+    .map(|bomb| bomb.position)
+    .collect();
+
+  user::update_balance(&state.pool, user.id, Some(game.pool + user.balance))
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?;
+
+  Ok((
+    StatusCode::OK,
+    MinesweeperGame {
+      id: response_game.id.to_string(),
+      state: response_game.state,
+      result: response_game.result,
+      stake: response_game.stake.0,
+      pool: response_game.pool.0,
+      bomb: MinesweeperBombs {
+        count: bombs.len() as i64,
+        position: bombs,
+      },
+      size: CONSTANTS.game_size,
+      clicks: clicks
+        .iter()
+        .map(|click| MinesweeperClick {
+          earned: click.earned.0,
+          position: click.position,
+        })
+        .collect(),
+    },
+  ))
 }
