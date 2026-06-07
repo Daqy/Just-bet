@@ -39,6 +39,7 @@ async fn main() -> Result<(), anyhow::Error> {
     .route("/get-balance", routing::get(user::get_balance))
     .route("/game/:id", routing::get(minesweeper::get))
     .route("/latest-game", routing::get(minesweeper::get_latest))
+    .route("/game-history", routing::get(minesweeper::get_games))
     .route("/claim-game", routing::post(minesweeper::claim))
     .route("/create-game", routing::post(minesweeper::create))
     .route(

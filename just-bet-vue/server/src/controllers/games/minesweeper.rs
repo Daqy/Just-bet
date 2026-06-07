@@ -395,6 +395,94 @@ pub async fn get(
   ))
 }
 
+#[axum::debug_handler]
+pub async fn get_games(
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+) -> Result<(StatusCode, Json<Vec<MinesweeperGame>>), (StatusCode, Json<ErrorMessage>)> {
+  let games = minesweeper::get_games_by_user_id(&state.pool, user.id)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?;
+
+  println!("{:?}", games);
+  match games {
+    Some(games) => {
+      let mut response_games: Vec<MinesweeperGame> = Vec::new();
+      for game in games {
+        if game.state != CONSTANTS.done.to_string() {
+          continue;
+        }
+        let clicks = minesweeper::get_clicks_by_game(&state.pool, &game)
+          .await
+          .map_err(|_| {
+            (
+              StatusCode::INTERNAL_SERVER_ERROR,
+              Json(ErrorMessage {
+                msg: "Something really went wrong".to_string(),
+              }),
+            )
+          })?
+          .ok_or((
+            StatusCode::FORBIDDEN,
+            Json(ErrorMessage {
+              msg: "no clicks found".to_string(),
+            }),
+          ))?;
+
+        let bombs: Vec<i64> = minesweeper::get_bombs_by_game(&state.pool, &game)
+          .await
+          .map_err(|_| {
+            (
+              StatusCode::INTERNAL_SERVER_ERROR,
+              Json(ErrorMessage {
+                msg: "Something really went wrong".to_string(),
+              }),
+            )
+          })?
+          .ok_or((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorMessage {
+              msg: "Game wasn't craeted correctly".to_string(),
+            }),
+          ))?
+          .iter()
+          .map(|bomb| bomb.position)
+          .collect();
+
+        response_games.push(MinesweeperGame {
+          id: game.id.to_string(),
+          state: game.state,
+          result: game.result,
+          stake: game.stake.0,
+          pool: game.pool.0,
+          bomb: MinesweeperBombs {
+            count: bombs.len() as i64,
+            position: bombs,
+          },
+          size: CONSTANTS.game_size,
+          clicks: clicks
+            .iter()
+            .map(|click| MinesweeperClick {
+              earned: click.earned.0,
+              position: click.position,
+            })
+            .collect(),
+        })
+      }
+
+      Ok((StatusCode::OK, Json(response_games)))
+    }
+    None => Ok((StatusCode::OK, Json(Vec::new()))),
+  }
+}
+
 #[derive(Deserialize, Debug)]
 pub struct ClickQuery {
   pub click_position: Option<i64>,

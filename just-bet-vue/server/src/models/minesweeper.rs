@@ -13,7 +13,7 @@ use crate::models::schema::{
   clicks, minesweeper,
 };
 
-#[derive(Identifiable, Debug, Queryable, Selectable)]
+#[derive(Identifiable, Debug, Queryable, Selectable, Clone)]
 #[diesel(table_name = crate::models::schema::minesweeper)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 #[allow(dead_code)]
@@ -74,6 +74,21 @@ pub async fn get_game_by_id(
       .select(Minesweeper::as_select())
       .order_by(minesweeper::created.desc())
       .first(&mut pool.get().await.unwrap())
+      .await
+      .optional()?,
+  )
+}
+
+pub async fn get_games_by_user_id(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+) -> Result<Option<Vec<Minesweeper>>, diesel::result::Error> {
+  Ok(
+    minesweeper::table
+      .filter(minesweeper::belongs_to.eq(id))
+      .select(Minesweeper::as_select())
+      .order_by(minesweeper::created.desc())
+      .get_results(&mut pool.get().await.unwrap())
       .await
       .optional()?,
   )
