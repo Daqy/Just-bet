@@ -100,10 +100,6 @@ function claimRewards() {
   const { post } = useApi('/api/claim-game')
   post({ gameid: gameStore.game.id }).then((response: any) => {
     gameStore.game = { ...gameStore.game, ...response }
-    const { get } = useApi(`/api/game/${response.id}/bomb-locations`)
-    get().then((res: any) => {
-      gameStore.game.bomb.position = res
-    })
     const balanceUpdate = useApi('/api/get-balance')
     balanceUpdate.get().then((res: { balance: number }) => {
       authStore.balance = res.balance
