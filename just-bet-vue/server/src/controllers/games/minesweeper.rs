@@ -149,17 +149,18 @@ impl IntoResponse for CreateGame {
   }
 }
 
-struct Constants<'a> {
-  lost: &'a str,
-  claimed: &'a str,
-  done: &'a str,
-  ongoing: &'a str,
-  awaiting: &'a str,
-  prep: &'a str,
-  game_size: i64,
+pub struct Constants<'a> {
+  pub lost: &'a str,
+  pub claimed: &'a str,
+  pub done: &'a str,
+  pub ongoing: &'a str,
+  pub awaiting: &'a str,
+  pub prep: &'a str,
+  pub game_size: i64,
+  pub claim_amount: PgMoney,
 }
 
-const CONSTANTS: Constants = {
+pub const CONSTANTS: Constants = {
   Constants {
     lost: "lost",
     claimed: "claimed",
@@ -168,6 +169,7 @@ const CONSTANTS: Constants = {
     awaiting: "awaiting",
     prep: "prep",
     game_size: 25,
+    claim_amount: PgMoney(5000),
   }
 };
 

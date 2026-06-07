@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use crate::AppState;
-use crate::models::user;
+use crate::controllers::games::minesweeper::CONSTANTS;
+use crate::models::user::{self, UpdateUser};
 use axum::extract::{Request, State};
 use axum::http::StatusCode;
 use axum::middleware::Next;
@@ -10,12 +11,14 @@ use axum::{Extension, Json};
 use axum_extra::extract::CookieJar;
 use axum_extra::extract::cookie::Cookie;
 
+use diesel::data_types::PgMoney;
+
 use argon2::{
   Argon2,
   password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use jsonwebtoken::{EncodingKey, Header, decode_header, encode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -183,8 +186,8 @@ pub async fn register(
       username: input.username,
       email: input.email,
       password_hash: password_hash,
-      balance: diesel::data_types::PgMoney(10000), // £100
-      claim_expires_timestamp: diesel::data_types::PgTimestamp(Utc::now().timestamp()),
+      balance: PgMoney(10000), // £100
+      claim_expires_timestamp: Utc::now().naive_utc(),
     },
   )
   .await
@@ -322,6 +325,107 @@ pub async fn get_balance(
   Ok((
     StatusCode::OK,
     Balance {
+      balance: user.balance.0,
+    },
+  ))
+}
+
+#[derive(Serialize)]
+pub struct GetClaim {
+  claimable: bool,
+  claim_amount: i64,
+  timestamp: chrono::NaiveDateTime,
+}
+impl IntoResponse for GetClaim {
+  fn into_response(self) -> Response {
+    Json(json!(&self)).into_response()
+  }
+}
+
+#[axum::debug_handler]
+pub async fn get_claim(
+  Extension(user): Extension<user::User>,
+) -> Result<(StatusCode, GetClaim), (StatusCode, Json<ErrorMessage>)> {
+  if user.claim_expires_timestamp < Utc::now().naive_utc() {
+    return Ok((
+      StatusCode::OK,
+      GetClaim {
+        claimable: true,
+        claim_amount: CONSTANTS.claim_amount.0,
+        timestamp: user.claim_expires_timestamp,
+      },
+    ));
+  }
+
+  return Ok((
+    StatusCode::OK,
+    GetClaim {
+      claimable: false,
+      claim_amount: 50,
+      timestamp: user.claim_expires_timestamp,
+    },
+  ));
+  // Ok((
+  //   StatusCode::OK,
+  //   Balance {
+  //     balance: user.balance.0,
+  //   },
+  // ))
+}
+
+#[derive(Serialize)]
+pub struct Claim {
+  claimable: bool,
+  claim_amount: i64,
+  timestamp: chrono::NaiveDateTime,
+  balance: i64,
+}
+impl IntoResponse for Claim {
+  fn into_response(self) -> Response {
+    Json(json!(&self)).into_response()
+  }
+}
+
+pub async fn claim(
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+) -> Result<(StatusCode, Claim), (StatusCode, Json<ErrorMessage>)> {
+  if user.claim_expires_timestamp < Utc::now().naive_utc() {
+    let reponse_user = user::update(
+      &state.pool,
+      user.id,
+      &UpdateUser {
+        timestamp: Some(Utc::now().naive_utc() + Duration::days(1)),
+        balance: Some(user.balance + CONSTANTS.claim_amount),
+      },
+    )
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Database error".to_string(),
+        }),
+      )
+    })?;
+
+    return Ok((
+      StatusCode::OK,
+      Claim {
+        claimable: false,
+        claim_amount: CONSTANTS.claim_amount.0,
+        timestamp: reponse_user.claim_expires_timestamp,
+        balance: reponse_user.balance.0,
+      },
+    ));
+  }
+
+  Ok((
+    StatusCode::OK,
+    Claim {
+      claimable: false,
+      claim_amount: CONSTANTS.claim_amount.0,
+      timestamp: user.claim_expires_timestamp,
       balance: user.balance.0,
     },
   ))

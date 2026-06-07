@@ -1,8 +1,6 @@
 use diesel::{
   ExpressionMethods, OptionalExtension, QueryDsl, Queryable, Selectable, SelectableHelper,
-  data_types::{PgMoney, PgTimestamp},
-  prelude::Insertable,
-  query_builder::AsChangeset,
+  data_types::PgMoney, prelude::Insertable, query_builder::AsChangeset,
 };
 // use diesel::prelude::*;
 
@@ -21,7 +19,7 @@ pub struct User {
   pub email: String,
   pub password_hash: String,
   pub balance: PgMoney,
-  pub claim_expires_timestamp: PgTimestamp,
+  pub claim_expires_timestamp: chrono::NaiveDateTime,
 }
 
 pub async fn user_exist_by_username(
@@ -74,7 +72,7 @@ struct NewUser<'a> {
   email: &'a str,
   password_hash: &'a str,
   balance: &'a PgMoney,
-  claim_expires_timestamp: &'a PgTimestamp,
+  claim_expires_timestamp: &'a chrono::NaiveDateTime,
 }
 pub async fn create_user(
   pool: &Pool<AsyncPgConnection>,
@@ -93,6 +91,38 @@ pub async fn create_user(
       .returning(User::as_returning())
       .get_results(&mut pool.get().await.unwrap())
       .await?,
+  )
+}
+
+#[derive(AsChangeset)]
+#[diesel(table_name = users)]
+pub struct SetUser {
+  pub claim_expires_timestamp: Option<chrono::NaiveDateTime>,
+  pub balance: Option<PgMoney>,
+}
+
+pub struct UpdateUser {
+  pub timestamp: Option<chrono::NaiveDateTime>,
+  pub balance: Option<PgMoney>,
+}
+
+pub async fn update(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+  user: &UpdateUser,
+) -> Result<User, diesel::result::Error> {
+  Ok(
+    diesel::update(users::table)
+      .filter(users::id.eq(id))
+      .set(&SetUser {
+        claim_expires_timestamp: user.timestamp,
+        balance: user.balance,
+      })
+      .returning(User::as_returning())
+      .get_results(&mut pool.get().await.unwrap())
+      .await?
+      .pop()
+      .unwrap(),
   )
 }
 

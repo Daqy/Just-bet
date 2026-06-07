@@ -37,6 +37,8 @@ async fn main() -> Result<(), anyhow::Error> {
     .route("/auth", routing::post(user::auth))
     .route("/get-user", routing::get(user::get))
     .route("/get-balance", routing::get(user::get_balance))
+    .route("/get-claim", routing::get(user::get_claim))
+    .route("/claim-reward", routing::post(user::claim))
     .route("/game/:id", routing::get(minesweeper::get))
     .route("/latest-game", routing::get(minesweeper::get_latest))
     .route("/game-history", routing::get(minesweeper::get_games))

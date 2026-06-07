@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-diesel = { version = "2.2.0", features = ["postgres"] }
+diesel = { version = "2.2.0", features = ["postgres", "chrono"] }
 tokio = { version = "1.42.0", features = ["full"] }
 axum = { version = "0.7.9", features = ["macros"] }
 dotenvy = "0.15"
@@ -13,7 +13,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 jsonwebtoken = { version = "10", features = ["aws_lc_rs"] }
 diesel-async = { version = "0.8.0", features = ["postgres","deadpool"] }
 anyhow = "1.0.102"
-chrono = "0.4.44"
+chrono =  { version = "0.4.44", features = ["serde"] }
 argon2 = { version = "0.5", features = ["std"] }
 axum-extra = {version = "0.9", default-features = false, features = ["cookie"]}
 snowflaked = "1.0.3"
