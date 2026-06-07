@@ -239,7 +239,7 @@ pub async fn verify(
     .value();
 
   let user_id = decode_header(token)
-    .map_err(|err| {
+    .map_err(|_| {
       (
         StatusCode::FORBIDDEN,
         Json(ErrorMessage {
