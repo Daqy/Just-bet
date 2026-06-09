@@ -1,9 +1,15 @@
 mod controllers;
 mod models;
 
-use crate::controllers::{games::minesweeper, user};
+use crate::controllers::{
+  games::{battleship, minesweeper},
+  user,
+};
 use anyhow::Ok;
-use axum::{Router, middleware, routing};
+use axum::{
+  Router, middleware,
+  routing::{self, any},
+};
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::pooled_connection::deadpool::Pool;
@@ -21,6 +27,7 @@ async fn establish_connection() -> Result<Pool<AsyncPgConnection>, anyhow::Error
   Ok(Pool::builder(config).build()?)
 }
 
+#[derive(Clone)]
 struct AppState {
   pool: Pool<AsyncPgConnection>,
 }
@@ -48,6 +55,7 @@ async fn main() -> Result<(), anyhow::Error> {
       "/game/minesweeper/:id/click",
       routing::get(minesweeper::click),
     )
+    .route("/battleship/ws", any(battleship::handler))
     .layer(middleware::from_fn_with_state(
       Arc::clone(&state),
       user::verify,
