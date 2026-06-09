@@ -9,7 +9,6 @@ use axum::{
   http::StatusCode,
   response::{IntoResponse, Response},
 };
-use jsonwebtoken::errors::ErrorKind::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use snowflaked::Generator;
