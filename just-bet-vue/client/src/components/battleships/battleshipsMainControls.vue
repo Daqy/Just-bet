@@ -43,13 +43,11 @@ function createGame() {
   error.value = undefined
 
   post({ stake: betAmount.value }).then((response) => {
-    const balanceUpdate = useApi('/api/balance')
-    balanceUpdate
-      .post({ gameid: response.gameid, balance: -betAmount.value })
-      .then((res: { balance: number }) => {
-        authStore.balance = res.balance
-        router.push(`/battleships/${response.gameid}`)
-      })
+    const balanceUpdate = useApi('/api/get-balance')
+    balanceUpdate.get().then((res: { balance: number }) => {
+      authStore.balance = res.balance
+      router.push(`/battleships/${response.gameid}`)
+    })
   })
 }
 </script>
