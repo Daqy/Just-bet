@@ -9,6 +9,7 @@ use axum::{
   http::StatusCode,
   response::{IntoResponse, Response},
 };
+use jsonwebtoken::errors::ErrorKind::Json;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use snowflaked::Generator;
@@ -20,7 +21,7 @@ use crate::{
     user::ErrorMessage,
   },
   models::{
-    battleship::{self, Battleship},
+    battleship::{self, Battleship, UpdateGame},
     user,
   },
 };
@@ -193,6 +194,92 @@ pub async fn create(
       }),
     )
   })?;
+
+  Ok((
+    StatusCode::OK,
+    Json(CreateGameResponse {
+      gameid: game.id.to_string(),
+    }),
+  ))
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JoinGame {
+  pub gameid: i64,
+}
+impl IntoResponse for JoinGame {
+  fn into_response(self) -> Response {
+    Json(json!(&self)).into_response()
+  }
+}
+
+pub async fn join_game(
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+  Json(input): Json<JoinGame>,
+) -> Result<(StatusCode, Json<CreateGameResponse>), (StatusCode, Json<ErrorMessage>)> {
+  let game = battleship::get_game_by_id(&state.pool, input.gameid)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::NOT_FOUND,
+      Json(ErrorMessage {
+        msg: "Unable to find game".to_string(),
+      }),
+    ))?;
+
+  if game.opponent != None {
+    return Err((
+      StatusCode::CONFLICT,
+      Json(ErrorMessage {
+        msg: "Game already has an opponent".to_string(),
+      }),
+    ));
+  }
+
+  let rand = rand::random_range(1..2);
+
+  let game = battleship::update_game(
+    &state.pool,
+    game.id,
+    &UpdateGame {
+      state: Some(CONSTANTS.prep.to_string()),
+      pool: Some(PgMoney(game.stake.0 * 2)),
+      turn: if rand == 1 {
+        Some(user.id)
+      } else {
+        Some(game.belongs_to)
+      },
+      opponent: Some(user.id),
+    },
+  )
+  .await
+  .map_err(|_| {
+    (
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "Something really went wrong".to_string(),
+      }),
+    )
+  })?;
+
+  user::update_balance(&state.pool, user.id, Some(user.balance - game.stake))
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?;
 
   Ok((
     StatusCode::OK,

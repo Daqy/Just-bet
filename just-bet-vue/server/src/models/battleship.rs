@@ -74,3 +74,56 @@ pub async fn create_game(
       .await?,
   )
 }
+
+pub async fn get_game_by_id(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+) -> Result<Option<Battleship>, diesel::result::Error> {
+  Ok(
+    battleship::table
+      .filter(battleship::id.eq(id))
+      .select(Battleship::as_select())
+      .order_by(battleship::created.desc())
+      .first(&mut pool.get().await.unwrap())
+      .await
+      .optional()?,
+  )
+}
+
+#[derive(AsChangeset)]
+#[diesel(table_name = battleship)]
+pub struct SetGame<'a> {
+  pub state: Option<&'a String>,
+  pub pool: Option<PgMoney>,
+  pub turn: Option<i64>,
+  pub opponent: Option<i64>,
+}
+
+pub struct UpdateGame {
+  pub state: Option<String>,
+  pub pool: Option<PgMoney>,
+  pub turn: Option<i64>,
+  pub opponent: Option<i64>,
+}
+
+pub async fn update_game(
+  pool: &Pool<AsyncPgConnection>,
+  game_id: i64,
+  game: &UpdateGame,
+) -> Result<Battleship, diesel::result::Error> {
+  Ok(
+    diesel::update(battleship::table)
+      .filter(battleship::id.eq(game_id))
+      .set(&SetGame {
+        state: game.state.as_ref(),
+        turn: game.turn,
+        pool: game.pool,
+        opponent: game.opponent,
+      })
+      .returning(Battleship::as_returning())
+      .get_results(&mut pool.get().await.unwrap())
+      .await?
+      .pop()
+      .unwrap(),
+  )
+}

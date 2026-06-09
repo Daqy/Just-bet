@@ -19,6 +19,7 @@ diesel::table! {
     battleship_clicks (id) {
         id -> Int8,
         belongs_to -> Int8,
+        clicked_by -> Int8,
         position -> Int8,
     }
 }
@@ -27,6 +28,7 @@ diesel::table! {
     battleship_ships (id) {
         id -> Int8,
         belongs_to -> Int8,
+        placed_by -> Int8,
         position -> Int8,
         size -> Int8,
     }
@@ -76,7 +78,9 @@ diesel::table! {
 }
 
 diesel::joinable!(battleship_clicks -> battleship (belongs_to));
+diesel::joinable!(battleship_clicks -> users (clicked_by));
 diesel::joinable!(battleship_ships -> battleship (belongs_to));
+diesel::joinable!(battleship_ships -> users (placed_by));
 diesel::joinable!(bombs -> minesweeper (belongs_to));
 diesel::joinable!(clicks -> minesweeper (belongs_to));
 diesel::joinable!(minesweeper -> users (belongs_to));

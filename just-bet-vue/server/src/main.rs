@@ -52,6 +52,7 @@ async fn main() -> Result<(), anyhow::Error> {
     .route("/claim-game", routing::post(minesweeper::claim))
     .route("/create-game", routing::post(minesweeper::create))
     .route("/battleship/create-game", routing::post(battleship::create))
+    .route("/battleship/join", routing::post(battleship::join_game))
     .route(
       "/game/minesweeper/:id/click",
       routing::get(minesweeper::click),
