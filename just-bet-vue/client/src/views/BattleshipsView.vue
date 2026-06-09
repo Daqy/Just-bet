@@ -1,14 +1,16 @@
 <script lang="ts" setup>
 import { useApi } from '@/services/api'
 import BattleshipControl from '@/components/battleships/battleshipsMainControls.vue'
-import { socket, state } from '@/socket'
+import { state } from '@/socket'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useSocketStore } from '@/stores/useSocketStore'
 
 const authStore = useAuthStore()
 const router = useRouter()
 const latestGame = useApi('/api/latest-game?gameType=battleships')
 
+const socket = useSocketStore()
 socket.emit('get-games')
 
 latestGame

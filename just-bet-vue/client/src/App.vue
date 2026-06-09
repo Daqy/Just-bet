@@ -11,11 +11,20 @@ import { computed, watch } from 'vue'
 import { useAuthStore } from '~stores/useAuthStore'
 import { useApi } from '~services/api'
 import { routerPathPrettify } from '@/services/routerPathPrettify'
-import { socket } from '@/socket'
+// import { socket } from '@/socket'
+import { useSocketStore } from './stores/useSocketStore'
 const { loading, get } = useApi('/api/get-user')
 
 // disable sockets to prevent spam, as endpoint does not have the current url.
-// socket.connect()
+
+// socket
+const socket = useSocketStore()
+socket.connect('/api/battleship/ws')
+
+socket.on('connected', (event) => {
+  console.log(event)
+  console.log('user connected')
+})
 
 const authStore = useAuthStore()
 
