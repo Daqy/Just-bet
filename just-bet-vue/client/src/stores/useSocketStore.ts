@@ -32,7 +32,6 @@ export const useSocketStore = defineStore('socket', () => {
 
   const emit = (type: string, data?: Record<string, unknown>) => {
     if (!connected.value) return
-    console.log('socket', socket.value)
     socket.value.send(
       JSON.stringify({
         type,
@@ -44,8 +43,14 @@ export const useSocketStore = defineStore('socket', () => {
   const on = (message: string, cb: (...args: any) => any) => {
     if (!connected.value) return
     socket.value.onmessage = (event: MessageEvent, ...args: any) => {
-      if (event?.data?.type === message) {
-        cb(event, ...args)
+      let data
+      try {
+        data = JSON.parse(event.data)
+      } catch (err) {
+        data = event.data
+      }
+      if (data?.type === message) {
+        cb(data, event, ...args)
       }
     }
   }

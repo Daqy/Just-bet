@@ -5,10 +5,11 @@ import { state } from '@/socket'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useSocketStore } from '@/stores/useSocketStore'
+import { prettify } from '@/services/prettify'
 
 const authStore = useAuthStore()
 const router = useRouter()
-const latestGame = useApi('/api/latest-game?gameType=battleships')
+const latestGame = useApi('/api/battleships/latest-game')
 
 const socket = useSocketStore()
 socket.emit('get-games')
@@ -16,7 +17,7 @@ socket.emit('get-games')
 latestGame
   .get()
   .then((response) => {
-    if (response.state !== 'done') {
+    if (response?.state !== 'done' && response.id) {
       router.push(`/battleships/${response.id}`)
     }
   })
@@ -29,8 +30,8 @@ const joinGame = (gameid) => {
     const balanceUpdate = useApi('/api/get-balance')
     balanceUpdate.get().then((res: { balance: number }) => {
       authStore.balance = res.balance
+      router.push(`/battleships/${response.gameid}`)
     })
-    router.push(`/battleships/${response.gameid}`)
   })
 }
 </script>
@@ -44,11 +45,11 @@ const joinGame = (gameid) => {
             <div class="icon"></div>
             <div>
               <h2 class="heading">Created by</h2>
-              <p>{{ game.belongsTo }}</p>
+              <p>{{ game.belongs_to }}</p>
             </div>
             <div>
               <h2 class="heading">Bet amount</h2>
-              <p>${{ game.stake }}</p>
+              <p>${{ prettify(game.stake) }}</p>
             </div>
             <button class="button" @click="joinGame(game.id)">join</button>
           </div>

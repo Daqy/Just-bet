@@ -5,7 +5,7 @@ import BoardSquare from '~components/battleships/BoardSquare.vue'
 import BattleshipShip from '~components/battleships/BattleshipShip.vue'
 import { useApi } from '@/services/api'
 import { game } from '@/mock/game'
-import { socket, state } from '@/socket'
+import { state } from '@/socket'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -21,7 +21,7 @@ onUnmounted(() => {
 const gridRowCount = 8
 const alphabet = 'abcdefghijklmnopqrstuvwxyz'
 
-const { get, data, loading } = useApi('/api/latest-game?gameType=battleships')
+const { get, data, loading } = useApi('/api/battleships/latest-game')
 
 get()
 

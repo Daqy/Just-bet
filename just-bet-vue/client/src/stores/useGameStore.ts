@@ -7,7 +7,7 @@ export const useGameStore = defineStore('game', () => {
   const loading = ref(false)
 
   function getLatestGame() {
-    const latestGame = useApi('/api/latest-game?gameType=minesweeper')
+    const latestGame = useApi('/api/latest-game')
     loading.value = true
 
     latestGame.get().then((response: any) => {

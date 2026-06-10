@@ -2,12 +2,14 @@ import { reactive, watch } from 'vue'
 import { io } from 'socket.io-client'
 import { useAuthStore } from './stores/useAuthStore'
 import { useApi } from '@/services/api'
+import { useSocketStore } from './stores/useSocketStore'
 
 export const state = reactive({
   connected: false,
   game: {},
   games: []
 })
+const socket = useSocketStore()
 
 // "undefined" means the URL will be computed from the `window.location` object
 const URL = 'http://localhost:3000'
@@ -41,9 +43,9 @@ const URL = 'http://localhost:3000'
 //   state.connected = false
 // })
 
-// socket.on('games', (games) => {
-//   state.games = games
-// })
+socket.on('get-games', (res) => {
+  state.games = res.data
+})
 
 // socket.on('user-joined', async ({ game }) => {
 //   const { get } = useApi(`/api/game/${game.id}`)
