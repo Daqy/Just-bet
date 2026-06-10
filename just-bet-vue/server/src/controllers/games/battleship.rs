@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{any::Any, sync::Arc, vec};
 
 use axum::{
   Extension, Json,
@@ -6,7 +6,7 @@ use axum::{
     State, WebSocketUpgrade,
     ws::{Message, WebSocket},
   },
-  http::StatusCode,
+  http::{StatusCode, response},
   response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
@@ -27,17 +27,21 @@ use crate::{
 use diesel::data_types::PgMoney;
 
 #[axum::debug_handler]
-pub async fn handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {
-  ws.on_upgrade(|socket| handle_socket(socket, state))
+pub async fn handler(
+  ws: WebSocketUpgrade,
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+) -> Response {
+  ws.on_upgrade(|socket| handle_socket(socket, state, user))
 }
 
-#[derive(serde::Deserialize, Debug)]
-struct SocketMessage {
+#[derive(Serialize, Deserialize, Debug)]
+struct SocketMessage<T> {
   r#type: String,
-  data: Option<serde_json::Value>,
+  data: Option<T>,
 }
 
-pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
+pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>, user: user::User) {
   // let _ = socket.send(Message::Text(format!("connected"))).await;
 
   while let Some(msg) = socket.recv().await {
@@ -46,19 +50,63 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
 
       let message: Option<Message> = match msg {
         Message::Text(text) => {
-          let socket_message: SocketMessage = serde_json::from_str(&text).unwrap();
+          let socket_message: SocketMessage<String> = serde_json::from_str(&text).unwrap();
 
           let response = if socket_message.r#type == "connected" {
-            Some(Message::Text("User connected".to_string()))
-          } else if socket_message.r#type == "get_games" {
-            // Some()
-            None
+            Some(Message::Text(
+              serde_json::to_string(&SocketMessage::<String> {
+                r#type: "connect".to_string(),
+                data: None,
+              })
+              .unwrap(),
+            ))
+          } else if socket_message.r#type == "get-games" {
+            let games =
+              battleship::get_games_by_state(&state.pool, CONSTANTS.awaiting.to_string()).await;
+
+            let games = match games {
+              Ok(games) => match games {
+                Some(games) => games,
+                None => Vec::new(),
+              },
+              Err(_) => Vec::new(),
+            };
+
+            let mut response_game: Vec<BattleshipsGame> = Vec::new();
+
+            for game in games {
+              let belongs_to_username = user::user_exist_by_id(&state.pool, &game.belongs_to)
+                .await
+                .unwrap()
+                .unwrap()
+                .username;
+
+              response_game.push(BattleshipsGame {
+                id: game.id.to_string(),
+                state: game.state.clone(),
+                belongs_to: belongs_to_username,
+                stake: game.stake.0,
+                pool: game.pool.0,
+                ready: false,
+                winner: None,
+                opponent: None,
+                clicks: Vec::new(),
+                ships: Vec::new(),
+                turn: game.turn.to_string(),
+              })
+            }
+
+            Some(Message::Text(
+              serde_json::to_string(&SocketMessage {
+                r#type: "get-games".to_string(),
+                data: Some(response_game),
+              })
+              .unwrap(),
+            ))
           } else {
             None
           };
-          // if socket_message.r#type == "connected" {
-          //   return Some(Message::Text("User connected".to_string()));
-          // }
+
           response
         }
         _ => None,
@@ -78,37 +126,6 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>) {
       // client disconnected
       return;
     }
-    // if let Ok(msg) = msg {
-
-    //   match msg {
-    //     Message::Text(text) => {
-    //       println!("{:?}", socket_message);
-
-    //         // let result = socket.send(Message::Text(format!("User connected"))).await;
-    //         // msg
-    //       }
-    //       // let result = socket
-    //       //   .send(Message::Text(format!("Echo back text: {}", text).into()))
-    //       //   .await;
-    //       msg
-    //     }
-    //     _ => {}
-    //   }
-
-    //   // msg
-    // } else {
-    //   // client disconnected
-    //   println!("Client disconnected");
-    //   return;
-    // };
-
-    // let _ = socket.send(Message::Text(format!("testing"))).await;
-
-    // if socket.send(msg.unwrap()).await.is_err() {
-    //   // client disconnected
-    //   println!("Client disconnected 1");
-    //   return;
-    // }
   }
 }
 
@@ -285,5 +302,237 @@ pub async fn join_game(
     Json(CreateGameResponse {
       gameid: game.id.to_string(),
     }),
+  ))
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BattleshipOpponent {
+  ready: bool,
+  ships: Option<Vec<i64>>,
+  clicks: Vec<i64>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BattleshipsGame {
+  pub id: String,
+  pub belongs_to: String,
+  pub state: String,
+  pub winner: Option<String>,
+  pub turn: String,
+  pub stake: i64,
+  pub pool: i64,
+  pub ready: bool,
+  pub opponent: Option<BattleshipOpponent>,
+  pub ships: Vec<i64>,
+  pub clicks: Vec<i64>,
+}
+
+impl IntoResponse for BattleshipsGame {
+  fn into_response(self) -> Response {
+    Json(json!(&self)).into_response()
+  }
+}
+
+pub async fn get_latest(
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+) -> Result<(StatusCode, BattleshipsGame), (StatusCode, Json<ErrorMessage>)> {
+  let game = battleship::get_game_by_user_id(&state.pool, user.id)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::OK,
+      Json(ErrorMessage {
+        msg: "User doesn't have any games".to_string(),
+      }),
+    ))?;
+
+  let belongs_to_username = user::user_exist_by_id(&state.pool, &game.belongs_to)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "User no longer exist".to_string(),
+      }),
+    ))?
+    .username;
+
+  if game.state == CONSTANTS.awaiting.to_string() {
+    // STATE: waiting for player to join
+    return Ok((
+      StatusCode::OK,
+      BattleshipsGame {
+        id: game.id.to_string(),
+        belongs_to: belongs_to_username,
+        state: game.state,
+        stake: game.stake.0,
+        pool: game.pool.0,
+        ready: false,
+        winner: None,
+        opponent: None,
+        clicks: Vec::new(),
+        ships: Vec::new(),
+        turn: game.turn.to_string(),
+      },
+    ));
+  }
+
+  let opponent_id = if user.id == game.belongs_to {
+    game.opponent.unwrap()
+  } else {
+    game.belongs_to
+  };
+
+  let ships: Vec<i64> = battleship::get_ships_by_user_and_game(&state.pool, user.id, game.id)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "Game wasn't craeted correctly".to_string(),
+      }),
+    ))?
+    .iter()
+    .map(|ship| ship.position)
+    .collect();
+
+  let opponent_ships: Vec<i64> =
+    battleship::get_ships_by_user_and_game(&state.pool, opponent_id, game.id)
+      .await
+      .map_err(|_| {
+        (
+          StatusCode::INTERNAL_SERVER_ERROR,
+          Json(ErrorMessage {
+            msg: "Something really went wrong".to_string(),
+          }),
+        )
+      })?
+      .ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Game wasn't craeted correctly".to_string(),
+        }),
+      ))?
+      .iter()
+      .map(|ship| ship.position)
+      .collect();
+
+  let clicks = battleship::get_clicks_by_user_and_game(&state.pool, user.id, game.id)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?;
+
+  let opponent_clicks = battleship::get_clicks_by_user_and_game(&state.pool, opponent_id, game.id)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?;
+
+  if game.state == CONSTANTS.done {
+    let winner = user::user_exist_by_id(&state.pool, &game.winner.unwrap())
+      .await
+      .map_err(|_| {
+        (
+          StatusCode::INTERNAL_SERVER_ERROR,
+          Json(ErrorMessage {
+            msg: "Something really went wrong".to_string(),
+          }),
+        )
+      })?
+      .ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "User no longer exist".to_string(),
+        }),
+      ))?;
+
+    // STATE: game is finished
+    return Ok((
+      StatusCode::OK,
+      BattleshipsGame {
+        id: game.id.to_string(),
+        state: game.state,
+        belongs_to: belongs_to_username,
+        stake: game.stake.0,
+        pool: game.pool.0,
+        ready: ships.len() as i64 == CONSTANTS.number_of_ships,
+        winner: Some(winner.username),
+        opponent: Some(BattleshipOpponent {
+          ready: opponent_ships.len() as i64 == CONSTANTS.number_of_ships,
+          ships: Some(opponent_ships),
+          clicks: match opponent_clicks {
+            Some(value) => value.iter().map(|click| click.position).collect(),
+            None => Vec::new(),
+          },
+        }),
+        clicks: match clicks {
+          Some(value) => value.iter().map(|click| click.position).collect(),
+          None => Vec::new(),
+        },
+        ships: ships,
+        turn: game.turn.to_string(),
+      },
+    ));
+  }
+
+  // STATE: game is playing
+  Ok((
+    StatusCode::OK,
+    BattleshipsGame {
+      id: game.id.to_string(),
+      state: game.state,
+      belongs_to: belongs_to_username,
+      stake: game.stake.0,
+      pool: game.pool.0,
+      ready: ships.len() as i64 == CONSTANTS.number_of_ships,
+      winner: None,
+      opponent: Some(BattleshipOpponent {
+        ready: opponent_ships.len() as i64 == CONSTANTS.number_of_ships,
+        ships: None,
+        clicks: match opponent_clicks {
+          Some(value) => value.iter().map(|click| click.position).collect(),
+          None => Vec::new(),
+        },
+      }),
+      clicks: match clicks {
+        Some(value) => value.iter().map(|click| click.position).collect(),
+        None => Vec::new(),
+      },
+      ships: ships,
+      turn: game.turn.to_string(),
+    },
   ))
 }

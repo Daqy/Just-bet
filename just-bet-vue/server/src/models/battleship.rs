@@ -7,8 +7,34 @@ use diesel::{
   query_builder::AsChangeset,
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Pool};
+use serde::Serialize;
 
-use crate::models::schema::battleship;
+use crate::models::schema::{battleship, battleship_clicks, battleship_ships};
+
+#[derive(Identifiable, Debug, Queryable, Selectable, Associations)]
+#[diesel(belongs_to(Battleship, foreign_key = belongs_to))]
+#[diesel(table_name = crate::models::schema::battleship_ships)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+#[allow(dead_code)]
+pub struct BattleshipShips {
+  pub id: i64,
+  pub belongs_to: i64,
+  pub position: i64,
+  pub placed_by: i64,
+  pub size: i64,
+}
+
+#[derive(Identifiable, Debug, Queryable, Selectable, Associations)]
+#[diesel(belongs_to(Battleship, foreign_key = belongs_to))]
+#[diesel(table_name = crate::models::schema::battleship_clicks)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+#[allow(dead_code)]
+pub struct BattleshipClicks {
+  pub id: i64,
+  pub belongs_to: i64,
+  pub position: i64,
+  pub clicked_by: i64,
+}
 
 #[derive(Identifiable, Debug, Queryable, Selectable)]
 #[diesel(table_name = crate::models::schema::battleship)]
@@ -35,6 +61,53 @@ pub async fn get_game_by_user_id(
       .select(Battleship::as_select())
       .order_by(battleship::created.desc())
       .first(&mut pool.get().await.unwrap())
+      .await
+      .optional()?,
+  )
+}
+
+pub async fn get_games_by_state(
+  pool: &Pool<AsyncPgConnection>,
+  state: String,
+) -> Result<Option<Vec<Battleship>>, diesel::result::Error> {
+  Ok(
+    battleship::table
+      .filter(battleship::state.eq(state))
+      .select(Battleship::as_select())
+      .order_by(battleship::created.desc())
+      .get_results(&mut pool.get().await.unwrap())
+      .await
+      .optional()?,
+  )
+}
+
+pub async fn get_ships_by_user_and_game(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+  game_id: i64,
+) -> Result<Option<Vec<BattleshipShips>>, diesel::result::Error> {
+  Ok(
+    battleship_ships::table
+      .filter(battleship_ships::placed_by.eq(id))
+      .filter(battleship_ships::belongs_to.eq(game_id))
+      .select(BattleshipShips::as_select())
+      .get_results(&mut pool.get().await.unwrap())
+      .await
+      .optional()?,
+  )
+}
+
+pub async fn get_clicks_by_user_and_game(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+  game_id: i64,
+) -> Result<Option<Vec<BattleshipClicks>>, diesel::result::Error> {
+  Ok(
+    battleship_clicks::table
+      .filter(battleship_clicks::clicked_by.eq(id))
+      .filter(battleship_clicks::belongs_to.eq(game_id))
+      .select(BattleshipClicks::as_select())
+      .get_results(&mut pool.get().await.unwrap())
       .await
       .optional()?,
   )
@@ -82,6 +155,7 @@ pub async fn get_game_by_id(
   Ok(
     battleship::table
       .filter(battleship::id.eq(id))
+      .or_filter(battleship::opponent.eq(id))
       .select(Battleship::as_select())
       .order_by(battleship::created.desc())
       .first(&mut pool.get().await.unwrap())

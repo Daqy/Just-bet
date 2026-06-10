@@ -157,6 +157,7 @@ pub struct Constants<'a> {
   pub awaiting: &'a str,
   pub prep: &'a str,
   pub game_size: i64,
+  pub number_of_ships: i64,
   pub claim_amount: PgMoney,
 }
 
@@ -170,6 +171,7 @@ pub const CONSTANTS: Constants = {
     prep: "prep",
     game_size: 25,
     claim_amount: PgMoney(5000),
+    number_of_ships: 5,
   }
 };
 
