@@ -18,13 +18,13 @@ const { loading, get } = useApi('/api/get-user')
 // disable sockets to prevent spam, as endpoint does not have the current url.
 
 // socket
-const socket = useSocketStore()
-socket.connect('/api/battleship/ws')
+// const socket = useSocketStore()
+// socket.connect('/api/battleship/ws')
 
-socket.on('connected', (event) => {
-  console.log(event)
-  console.log('user connected')
-})
+// socket.on('connected', (event) => {
+//   console.log(event)
+//   console.log('user connected')
+// })
 
 const authStore = useAuthStore()
 

@@ -1,4 +1,4 @@
-use std::{any::Any, sync::Arc, vec};
+use std::sync::Arc;
 
 use axum::{
   Extension, Json,
@@ -9,12 +9,17 @@ use axum::{
   http::{StatusCode, response},
   response::{IntoResponse, Response},
 };
+use futures::{
+  SinkExt,
+  stream::{self, StreamExt},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use snowflaked::Generator;
+use tokio::sync::broadcast;
 
 use crate::{
-  AppState,
+  AppState, RoomState,
   controllers::{
     games::minesweeper::{CONSTANTS, CreateGameResponse},
     user::ErrorMessage,
@@ -41,28 +46,124 @@ struct SocketMessage<T> {
   data: Option<T>,
 }
 
-pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>, user: user::User) {
+#[derive(Serialize, Deserialize, Debug)]
+struct JoinRoomPackets {
+  id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type")]
+enum Packets {
+  #[serde(rename = "join-room")]
+  JoinRoom { data: JoinRoomPackets },
+  #[serde(rename = "get-games")]
+  GetGames,
+}
+
+pub async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user: user::User) {
   // let _ = socket.send(Message::Text(format!("connected"))).await;
 
-  while let Some(msg) = socket.recv().await {
-    let msg = if let Ok(msg) = msg {
+  let (mut sender, mut receiver) = socket.split();
+
+  let mut tx = None::<broadcast::Sender<String>>;
+  let mut roomid = String::new();
+  // let mut channel = String::new();
+
+  while let Some(Ok(msg)) = receiver.next().await {
+    if let Message::Text(msg) = msg {
       println!("msg, {:?}", msg);
 
-      let message: Option<Message> = match msg {
-        Message::Text(text) => {
-          let socket_message: SocketMessage<String> = serde_json::from_str(&text).unwrap();
+      #[derive(Deserialize)]
+      struct Connect {
+        roomid: String,
+      }
 
-          let response = if socket_message.r#type == "connected" {
-            Some(Message::Text(
-              serde_json::to_string(&SocketMessage::<String> {
-                r#type: "connect".to_string(),
-                data: None,
-              })
-              .unwrap(),
-            ))
-          } else if socket_message.r#type == "get-games" {
+      let connect: Connect = match serde_json::from_str(&msg) {
+        Ok(connect) => connect,
+        Err(error) => {
+          tracing::error!(%error);
+          let _ = sender
+            .send(Message::Text(String::from(
+              "Failed to parse connect message",
+            )))
+            .await;
+          break;
+        }
+      };
+      // when user joins room, just add another entry to the state, just like below and then send a emit on the client, see if message is only recieved in that socket.
+
+      {
+        let mut rooms = state.rooms.lock().unwrap();
+
+        roomid = connect.roomid.clone();
+        let room = rooms.entry(connect.roomid).or_insert_with(RoomState::new);
+
+        tx = Some(room.tx.clone());
+
+        if !room.user_set.contains(&user.id) {
+          room.user_set.insert(user.id);
+        }
+      }
+
+      if tx.is_some() {
+        break;
+      } else {
+        let _ = sender
+          .send(Message::Text(String::from("Username already in room.")))
+          .await;
+
+        return;
+      }
+    }
+  }
+
+  let tx = tx.unwrap();
+
+  let mut rx: broadcast::Receiver<String> = tx.subscribe();
+
+  // Send joined message to all subscribers.
+  let msg = format!("{} joined {}.", user.username, roomid);
+  tracing::debug!("{}", msg);
+  let _ = tx.send(msg);
+
+  let send_roomid = roomid.clone();
+  let mut send_task = tokio::spawn(async move {
+    while let Ok(msg) = rx.recv().await {
+      println!("[{}:send]: {:?}", send_roomid, msg);
+      // In any websocket error, break loop.
+      if sender.send(Message::Text(msg)).await.is_err() {
+        break;
+      }
+    }
+  });
+
+  let mut recv_task = {
+    // Clone things we want to pass to the receiving task.
+    let tx: broadcast::Sender<String> = tx.clone();
+    let name = user.username.clone();
+    let roomid = roomid.clone();
+    let recv_pool = state.pool.clone();
+
+    // This task will receive messages from client and send them to broadcast subscribers.
+    tokio::spawn(async move {
+      while let Some(Ok(Message::Text(text))) = receiver.next().await {
+        println!("[{}:recv]: {:?}", roomid, text);
+
+        let packets: Packets = match serde_json::from_str(&text) {
+          Ok(msg) => msg,
+          Err(er) => {
+            println!("{:?}", er);
+            break;
+          }
+        };
+
+        println!("packets {:?}", packets);
+
+        match packets {
+          Packets::JoinRoom { data } => {}
+          Packets::GetGames => {
             let games =
-              battleship::get_games_by_state(&state.pool, CONSTANTS.awaiting.to_string()).await;
+              battleship::get_games_by_state(&recv_pool, CONSTANTS.awaiting.to_string()).await;
 
             let games = match games {
               Ok(games) => match games {
@@ -75,7 +176,7 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>, user: us
             let mut response_game: Vec<BattleshipsGame> = Vec::new();
 
             for game in games {
-              let belongs_to_username = user::user_exist_by_id(&state.pool, &game.belongs_to)
+              let belongs_to_username = user::user_exist_by_id(&recv_pool, &game.belongs_to)
                 .await
                 .unwrap()
                 .unwrap()
@@ -95,38 +196,33 @@ pub async fn handle_socket(mut socket: WebSocket, state: Arc<AppState>, user: us
                 turn: game.turn.to_string(),
               })
             }
-
-            Some(Message::Text(
+            let _ = tx.send(
               serde_json::to_string(&SocketMessage {
                 r#type: "get-games".to_string(),
                 data: Some(response_game),
               })
               .unwrap(),
-            ))
-          } else {
-            None
-          };
-
-          response
+            );
+          }
+          _ => {
+            let _ = tx.send(format!("{}: {}", name, text));
+          }
         }
-        _ => None,
-      };
-
-      match message {
-        Some(message) => message,
-        None => Message::Text("Socket doesn't exist".to_string()),
       }
-      // msg
-    } else {
-      // client disconnected
-      return;
-    };
+    })
+  };
 
-    if socket.send(msg).await.is_err() {
-      // client disconnected
-      return;
-    }
-  }
+  tokio::select! {
+  _ = (&mut send_task) => recv_task.abort(),
+  _ = (&mut recv_task) => send_task.abort(),
+  };
+
+  let msg = format!("{} left {}.", user.username, roomid);
+  tracing::debug!("{}", msg);
+  let _ = tx.send(msg);
+  let mut rooms = state.rooms.lock().unwrap();
+
+  rooms.get_mut(&roomid).unwrap().user_set.remove(&user.id);
 }
 
 #[derive(Serialize, Deserialize)]
@@ -221,7 +317,7 @@ pub async fn create(
 
 #[derive(Serialize, Deserialize)]
 pub struct JoinGame {
-  pub gameid: i64,
+  pub gameid: String,
 }
 impl IntoResponse for JoinGame {
   fn into_response(self) -> Response {
@@ -234,7 +330,15 @@ pub async fn join_game(
   Extension(user): Extension<user::User>,
   Json(input): Json<JoinGame>,
 ) -> Result<(StatusCode, Json<CreateGameResponse>), (StatusCode, Json<ErrorMessage>)> {
-  let game = battleship::get_game_by_id(&state.pool, input.gameid)
+  let game_id = input.gameid.parse::<i64>().map_err(|_| {
+    (
+      StatusCode::FORBIDDEN,
+      Json(ErrorMessage {
+        msg: "id must be a valid number".to_string(),
+      }),
+    )
+  })?;
+  let game = battleship::get_game_by_id(&state.pool, game_id)
     .await
     .map_err(|_| {
       (
@@ -305,14 +409,14 @@ pub async fn join_game(
   ))
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BattleshipOpponent {
   ready: bool,
   ships: Option<Vec<i64>>,
   clicks: Vec<i64>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BattleshipsGame {
   pub id: String,
   pub belongs_to: String,

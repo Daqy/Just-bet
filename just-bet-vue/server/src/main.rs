@@ -14,8 +14,9 @@ use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::pooled_connection::deadpool::Pool;
 use dotenvy::dotenv;
-use std::env;
-use std::sync::Arc;
+use std::{collections::HashMap, env, sync::Mutex};
+use std::{collections::HashSet, sync::Arc};
+use tokio::sync::broadcast;
 use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
 use tracing::Level;
 
@@ -27,9 +28,28 @@ async fn establish_connection() -> Result<Pool<AsyncPgConnection>, anyhow::Error
   Ok(Pool::builder(config).build()?)
 }
 
-#[derive(Clone)]
 struct AppState {
   pool: Pool<AsyncPgConnection>,
+  rooms: Mutex<HashMap<String, RoomState>>,
+}
+
+#[derive(Debug)]
+struct RoomState {
+  /// Previously stored in AppState
+  user_set: HashSet<i64>,
+  /// Previously created in main.
+  tx: broadcast::Sender<String>,
+}
+
+impl RoomState {
+  fn new() -> Self {
+    Self {
+      // Track usernames per room rather than globally.
+      user_set: HashSet::new(),
+      // Create a new channel for every room
+      tx: broadcast::channel(100).0,
+    }
+  }
 }
 
 #[tokio::main]
@@ -38,7 +58,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
   let pool = establish_connection().await?;
 
-  let state = Arc::new(AppState { pool });
+  let state = Arc::new(AppState {
+    pool,
+    rooms: Mutex::new(HashMap::new()),
+  });
 
   let auth_routes = Router::new()
     .route("/auth", routing::post(user::auth))

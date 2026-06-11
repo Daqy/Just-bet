@@ -58,6 +58,7 @@ pub async fn get_game_by_user_id(
   Ok(
     battleship::table
       .filter(battleship::belongs_to.eq(id))
+      .or_filter(battleship::opponent.eq(id))
       .select(Battleship::as_select())
       .order_by(battleship::created.desc())
       .first(&mut pool.get().await.unwrap())
@@ -155,7 +156,6 @@ pub async fn get_game_by_id(
   Ok(
     battleship::table
       .filter(battleship::id.eq(id))
-      .or_filter(battleship::opponent.eq(id))
       .select(Battleship::as_select())
       .order_by(battleship::created.desc())
       .first(&mut pool.get().await.unwrap())

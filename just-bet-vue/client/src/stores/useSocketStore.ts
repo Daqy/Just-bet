@@ -8,15 +8,16 @@ const baseURL = 'http://localhost:3000'
 export const useSocketStore = defineStore('socket', () => {
   const socket = ref()
 
-  const connected = computed(() => !!socket.value)
+  const connected = computed(() => socket.value?.readyState === 1)
 
-  const connect = (URL: string) => {
+  const connect = (URL: string, roomid = 'global') => {
     socket.value = new WebSocket(baseURL + URL)
 
     socket.value.onopen = ({ target: io }: any) => {
       io.send(
         JSON.stringify({
-          type: 'connected'
+          type: 'connected',
+          roomid
         })
       )
     }
@@ -31,13 +32,15 @@ export const useSocketStore = defineStore('socket', () => {
   }
 
   const emit = (type: string, data?: Record<string, unknown>) => {
-    if (!connected.value) return
+    console.log(socket.value)
+    if (!connected.value) return false
     socket.value.send(
       JSON.stringify({
         type,
         data
       })
     )
+    return true
   }
 
   const on = (message: string, cb: (...args: any) => any) => {

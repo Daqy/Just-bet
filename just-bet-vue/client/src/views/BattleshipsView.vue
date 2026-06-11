@@ -6,13 +6,14 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useSocketStore } from '@/stores/useSocketStore'
 import { prettify } from '@/services/prettify'
+import { nextTick, onMounted } from 'vue'
 
 const authStore = useAuthStore()
 const router = useRouter()
 const latestGame = useApi('/api/battleships/latest-game')
 
 const socket = useSocketStore()
-socket.emit('get-games')
+socket.connect('/api/battleship/ws')
 
 latestGame
   .get()
@@ -34,6 +35,17 @@ const joinGame = (gameid) => {
     })
   })
 }
+
+// socket.emit('get-games')
+
+;(function loop() {
+  setTimeout(() => {
+    // Your logic here
+    if (!socket.emit('get-games')) {
+      loop()
+    }
+  }, 1000)
+})()
 </script>
 
 <template>

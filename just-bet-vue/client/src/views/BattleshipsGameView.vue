@@ -8,9 +8,12 @@ import { game } from '@/mock/game'
 import { state } from '@/socket'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRoute, useRouter } from 'vue-router'
+import { useSocketStore } from '@/stores/useSocketStore'
 
 const authStore = useAuthStore()
 const router = useRouter()
+
+const socket = useSocketStore()
 
 document.documentElement.style.setProperty('--margin-bottom-main-container', '50px')
 
@@ -247,7 +250,7 @@ watch(
 
 const route = useRoute()
 
-socket.emit('join-room', route.params.gameid)
+socket.connect('/api/battleship/ws', route.params.gameid as string)
 </script>
 
 <template>
