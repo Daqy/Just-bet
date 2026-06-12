@@ -159,6 +159,8 @@ pub struct Constants<'a> {
   pub game_size: i64,
   pub number_of_ships: i64,
   pub claim_amount: PgMoney,
+  pub down: &'a str,
+  pub right: &'a str,
 }
 
 pub const CONSTANTS: Constants = {
@@ -172,6 +174,8 @@ pub const CONSTANTS: Constants = {
     game_size: 25,
     claim_amount: PgMoney(5000),
     number_of_ships: 5,
+    down: "down",
+    right: "right",
   }
 };
 

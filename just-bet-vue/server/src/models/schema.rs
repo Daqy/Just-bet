@@ -31,6 +31,8 @@ diesel::table! {
         placed_by -> Int8,
         position -> Int8,
         size -> Int8,
+        #[max_length = 30]
+        direction -> Varchar,
     }
 }
 

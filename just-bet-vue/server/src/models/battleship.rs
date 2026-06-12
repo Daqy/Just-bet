@@ -22,6 +22,7 @@ pub struct BattleshipShips {
   pub position: i64,
   pub placed_by: i64,
   pub size: i64,
+  pub direction: String,
 }
 
 #[derive(Identifiable, Debug, Queryable, Selectable, Associations)]
@@ -59,6 +60,24 @@ pub async fn get_game_by_user_id(
     battleship::table
       .filter(battleship::belongs_to.eq(id))
       .or_filter(battleship::opponent.eq(id))
+      .select(Battleship::as_select())
+      .order_by(battleship::created.desc())
+      .first(&mut pool.get().await.unwrap())
+      .await
+      .optional()?,
+  )
+}
+
+pub async fn get_game_by_user_and_game_id(
+  pool: &Pool<AsyncPgConnection>,
+  id: i64,
+  game_id: i64,
+) -> Result<Option<Battleship>, diesel::result::Error> {
+  Ok(
+    battleship::table
+      .filter(battleship::belongs_to.eq(id))
+      .or_filter(battleship::opponent.eq(id))
+      .filter(battleship::id.eq(game_id))
       .select(Battleship::as_select())
       .order_by(battleship::created.desc())
       .first(&mut pool.get().await.unwrap())
@@ -199,5 +218,29 @@ pub async fn update_game(
       .await?
       .pop()
       .unwrap(),
+  )
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = battleship_ships)]
+pub struct CreateShip {
+  pub id: i64,
+  pub belongs_to: i64,
+  pub position: i64,
+  pub placed_by: i64,
+  pub size: i64,
+  pub direction: String,
+}
+
+pub async fn create_ships(
+  pool: &Pool<AsyncPgConnection>,
+  ships: &Vec<CreateShip>,
+) -> Result<Vec<BattleshipShips>, diesel::result::Error> {
+  Ok(
+    diesel::insert_into(battleship_ships::table)
+      .values(ships)
+      .returning(BattleshipShips::as_returning())
+      .get_results(&mut pool.get().await.unwrap())
+      .await?,
   )
 }

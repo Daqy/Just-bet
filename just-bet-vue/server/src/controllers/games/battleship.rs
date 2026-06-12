@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
   Extension, Json,
@@ -25,7 +25,7 @@ use crate::{
     user::ErrorMessage,
   },
   models::{
-    battleship::{self, Battleship, UpdateGame},
+    battleship::{self, Battleship, CreateShip, UpdateGame},
     user,
   },
 };
@@ -639,4 +639,146 @@ pub async fn get_latest(
       turn: game.turn.to_string(),
     },
   ))
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GamePlacement {
+  pub gameid: String,
+  pub position: HashMap<i64, Vec<i64>>,
+}
+
+pub async fn confirm_placement(
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+  Json(input): Json<GamePlacement>,
+) -> Result<(StatusCode, Json<String>), (StatusCode, Json<ErrorMessage>)> {
+  println!("{:?}", input);
+  let game_id = input.gameid.parse::<i64>().map_err(|_| {
+    (
+      StatusCode::FORBIDDEN,
+      Json(ErrorMessage {
+        msg: "id must be a valid number".to_string(),
+      }),
+    )
+  })?;
+  let game = battleship::get_game_by_user_and_game_id(&state.pool, user.id, game_id)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::NOT_FOUND,
+      Json(ErrorMessage {
+        msg: "Unable to find game".to_string(),
+      }),
+    ))?;
+
+  // create the ships for this user. then get ships from users, check if users are ready, if both ready update game state
+  if game.belongs_to == user.id {
+    // battleship::update_game(&state.pool, game_id, &UpdateGame { state: None, pool: None, turn: None, opponent: () })
+  }
+
+  let ships: Vec<i64> = battleship::get_ships_by_user_and_game(&state.pool, user.id, game.id)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .ok_or((
+      StatusCode::INTERNAL_SERVER_ERROR,
+      Json(ErrorMessage {
+        msg: "Game wasn't craeted correctly".to_string(),
+      }),
+    ))?
+    .iter()
+    .map(|ship| ship.position)
+    .collect();
+
+  if ships.len() as i64 == CONSTANTS.number_of_ships {
+    return Err((
+      StatusCode::BAD_REQUEST,
+      Json(ErrorMessage {
+        msg: "User has already placed their ships".to_string(),
+      }),
+    ));
+  }
+
+  let mut ships: Vec<CreateShip> = Vec::new();
+  let mut generator = Generator::new(0);
+
+  for (key, value) in input.position {
+    ships.push(CreateShip {
+      id: generator.generate(),
+      belongs_to: game.id,
+      position: value[0],
+      placed_by: user.id,
+      size: key,
+      direction: if value.len() as i64 > 1 {
+        if value[1] - value[0] == 1 {
+          CONSTANTS.right.to_string()
+        } else {
+          CONSTANTS.down.to_string()
+        }
+      } else {
+        CONSTANTS.down.to_string()
+      },
+    })
+  }
+
+  let _ = battleship::create_ships(&state.pool, &ships)
+    .await
+    .map_err(|_| {
+      (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Something really went wrong".to_string(),
+        }),
+      )
+    })?
+    .pop()
+    .unwrap();
+
+  let opponent_id = if user.id == game.belongs_to {
+    game.opponent.unwrap()
+  } else {
+    game.belongs_to
+  };
+
+  let opponent_ships: Vec<i64> =
+    battleship::get_ships_by_user_and_game(&state.pool, opponent_id, game.id)
+      .await
+      .map_err(|_| {
+        (
+          StatusCode::INTERNAL_SERVER_ERROR,
+          Json(ErrorMessage {
+            msg: "Something really went wrong".to_string(),
+          }),
+        )
+      })?
+      .ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ErrorMessage {
+          msg: "Game wasn't craeted correctly".to_string(),
+        }),
+      ))?
+      .iter()
+      .map(|ship| ship.position)
+      .collect();
+
+  if opponent_ships.len() as i64 == CONSTANTS.number_of_ships {
+    // send to socket
+    return Ok((StatusCode::OK, Json("Game start".to_string())));
+  }
+
+  //send to socket
+  Ok((StatusCode::OK, Json("One user ready".to_string())))
 }
