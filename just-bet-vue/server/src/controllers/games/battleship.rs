@@ -63,8 +63,8 @@ struct JoinRoomPackets {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 enum Packets {
-  #[serde(rename = "join-room")]
-  JoinRoom { data: JoinRoomPackets },
+  #[serde(rename = "join-game")]
+  JoinGame { data: JoinRoomPackets },
 }
 
 pub async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user: user::User) {
@@ -167,7 +167,7 @@ pub async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user: user::
         println!("packets {:?}", packets);
 
         match packets {
-          Packets::JoinRoom { data } => {}
+          Packets::JoinGame { data } => {}
           _ => {
             let _ = tx.send(format!("{}: {}", name, text));
           }
@@ -546,6 +546,19 @@ pub async fn join_game(
       )
     })?;
 
+  {
+    let mut rooms = state.rooms.lock().unwrap();
+    let _ = rooms.get_mut(&game_id.to_string()).unwrap().tx.send(
+      serde_json::to_string(&SocketMessage {
+        r#type: "user_joined".to_string(),
+        data: Some(CreateGameResponse {
+          gameid: game.id.to_string(),
+        }),
+      })
+      .unwrap(),
+    );
+  }
+
   Ok((
     StatusCode::OK,
     Json(CreateGameResponse {
@@ -575,7 +588,6 @@ pub struct BattleshipsGame {
   pub ships: Vec<i64>,
   pub clicks: Vec<i64>,
 }
-
 
 pub async fn get_latest(
   State(state): State<Arc<AppState>>,
@@ -818,11 +830,6 @@ pub async fn confirm_placement(
       }),
     ))?;
 
-  // create the ships for this user. then get ships from users, check if users are ready, if both ready update game state
-  if game.belongs_to == user.id {
-    // battleship::update_game(&state.pool, game_id, &UpdateGame { state: None, pool: None, turn: None, opponent: () })
-  }
-
   let ships: Vec<i64> = battleship::get_ships_by_user_and_game(&state.pool, user.id, game.id)
     .await
     .map_err(|_| {
@@ -913,6 +920,19 @@ pub async fn confirm_placement(
       .iter()
       .map(|ship| ship.position)
       .collect();
+
+  {
+    let mut rooms = state.rooms.lock().unwrap();
+    let _ = rooms.get_mut(&game_id.to_string()).unwrap().tx.send(
+      serde_json::to_string(&SocketMessage {
+        r#type: "user_ready".to_string(),
+        data: Some(CreateGameResponse {
+          gameid: game.id.to_string(),
+        }),
+      })
+      .unwrap(),
+    );
+  }
 
   if opponent_ships.len() as i64 == CONSTANTS.number_of_ships {
     // send to socket
