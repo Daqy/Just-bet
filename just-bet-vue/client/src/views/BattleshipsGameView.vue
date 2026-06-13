@@ -5,15 +5,19 @@ import BoardSquare from '~components/battleships/BoardSquare.vue'
 import BattleshipShip from '~components/battleships/BattleshipShip.vue'
 import { useApi } from '@/services/api'
 import { game } from '@/mock/game'
-import { state } from '@/socket'
+// import { state } from '@/socket'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRoute, useRouter } from 'vue-router'
-import { useSocketStore } from '@/stores/useSocketStore'
+import { useSocket } from '@/composable/useSocket'
+import { useGameStore } from '@/stores/useGameStore'
+import { storeToRefs } from 'pinia'
 
 const authStore = useAuthStore()
+const gameStore = useGameStore()
 const router = useRouter()
+const route = useRoute()
 
-const socket = useSocketStore()
+const { battleship } = storeToRefs(gameStore)
 
 document.documentElement.style.setProperty('--margin-bottom-main-container', '50px')
 
@@ -27,6 +31,8 @@ const alphabet = 'abcdefghijklmnopqrstuvwxyz'
 const { get, data, loading } = useApi('/api/battleships/latest-game')
 
 get()
+
+const socket = useSocket('/ws/battleships/game', route.params.gameid as string)
 
 const lettersOnGrid = computed(() => {
   return alphabet.slice(0, gridRowCount).split('')
@@ -213,28 +219,19 @@ const handleBoardClick = (id: number) => {
   if (!data.value.turn || data.value.state === 'done') return
 
   socket.emit('board-click', { id: data.value.id, clickNumber: id, token: authStore.token })
-
-  // const { post } = useApi(`/api/game/battleships/${data.value.id}/click`)
-  // post({ id }).then((response) => {
-  //   if (response.state === 'done') {
-  //     // game finished
-  //   } else {
-
-  //   }
-  // })
 }
 
 const readyUp = () => {
-  const confirmShipPlacement = useApi('/api/battleship/confirm-placement')
+  const confirmShipPlacement = useApi('/api/battleships/confirm-placement')
 
   confirmShipPlacement.post({ gameid: route.params.gameid, position: onGrid.value })
   localStorage.setItem('ships', JSON.stringify({}))
 }
 
 watch(
-  () => state.game,
+  () => battleship.value.game,
   () => {
-    data.value = state.game
+    data.value = battleship.value.game
   }
 )
 
@@ -247,10 +244,6 @@ watch(
     }
   }
 )
-
-const route = useRoute()
-
-socket.connect('/api/battleship/ws', route.params.gameid as string)
 </script>
 
 <template>

@@ -1,19 +1,22 @@
 <script lang="ts" setup>
 import { useApi } from '@/services/api'
 import BattleshipControl from '@/components/battleships/battleshipsMainControls.vue'
-import { state } from '@/socket'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { useSocketStore } from '@/stores/useSocketStore'
+import { useSocket } from '@/composable/useSocket'
 import { prettify } from '@/services/prettify'
-import { nextTick, onMounted } from 'vue'
+import { useGameStore } from '@/stores/useGameStore'
+import { storeToRefs } from 'pinia'
 
 const authStore = useAuthStore()
+const gameStore = useGameStore()
 const router = useRouter()
 const latestGame = useApi('/api/battleships/latest-game')
 
-const socket = useSocketStore()
-socket.connect('/api/battleship/ws')
+const { battleship } = storeToRefs(gameStore)
+const socket = useSocket('/ws/battleships/games', 'games')
+
+console.log(socket.$socket)
 
 latestGame
   .get()
@@ -36,24 +39,23 @@ const joinGame = (gameid) => {
   })
 }
 
-// socket.emit('get-games')
+socket.emit('get-games')
 
-;(function loop() {
-  setTimeout(() => {
-    // Your logic here
-    if (!socket.emit('get-games')) {
-      loop()
-    }
-  }, 1000)
-})()
+socket.on('get-games', (res) => {
+  battleship.value.games = res.data
+})
+
+socket.on('game-created', () => {
+  socket.emit('get-games')
+})
 </script>
 
 <template>
   <main class="game">
     <section class="player-games">
       <div class="container">
-        <template v-if="state.games.length > 0">
-          <div class="player-game" v-for="game in state.games" :key="game">
+        <template v-if="battleship.games.length > 0">
+          <div class="player-game" v-for="game in battleship.games" :key="game">
             <div class="icon"></div>
             <div>
               <h2 class="heading">Created by</h2>
