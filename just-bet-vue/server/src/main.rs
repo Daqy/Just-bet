@@ -88,10 +88,11 @@ async fn main() -> Result<(), anyhow::Error> {
       routing::get(battleship::get_latest),
     )
     .route(
-      "/battleship/confirm-placement",
+      "/battleships/confirm-placement",
       routing::post(battleship::confirm_placement),
     )
-    .route("/battleship/ws", any(battleship::handler))
+    .route("/battleships/games", any(battleship::games))
+    .route("/battleships/game", any(battleship::handler))
     .layer(middleware::from_fn_with_state(
       Arc::clone(&state),
       user::verify,

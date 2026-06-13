@@ -40,6 +40,15 @@ pub async fn handler(
   ws.on_upgrade(|socket| handle_socket(socket, state, user))
 }
 
+#[axum::debug_handler]
+pub async fn games(
+  ws: WebSocketUpgrade,
+  State(state): State<Arc<AppState>>,
+  Extension(user): Extension<user::User>,
+) -> Response {
+  ws.on_upgrade(|socket| handle_game_socket(socket, state, user))
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct SocketMessage<T> {
   r#type: String,
@@ -56,8 +65,6 @@ struct JoinRoomPackets {
 enum Packets {
   #[serde(rename = "join-room")]
   JoinRoom { data: JoinRoomPackets },
-  #[serde(rename = "get-games")]
-  GetGames,
 }
 
 pub async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user: user::User) {
@@ -161,7 +168,137 @@ pub async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user: user::
 
         match packets {
           Packets::JoinRoom { data } => {}
-          Packets::GetGames => {
+          _ => {
+            let _ = tx.send(format!("{}: {}", name, text));
+          }
+        }
+      }
+    })
+  };
+
+  tokio::select! {
+  _ = (&mut send_task) => recv_task.abort(),
+  _ = (&mut recv_task) => send_task.abort(),
+  };
+
+  let msg = format!("{} left {}.", user.username, roomid);
+  tracing::debug!("{}", msg);
+  let _ = tx.send(msg);
+  let mut rooms = state.rooms.lock().unwrap();
+
+  rooms.get_mut(&roomid).unwrap().user_set.remove(&user.id);
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type")]
+enum Games {
+  #[serde(rename = "get-games")]
+  GetGames,
+  #[serde(rename = "game-created")]
+  GameCreated,
+}
+
+pub async fn handle_game_socket(socket: WebSocket, state: Arc<AppState>, user: user::User) {
+  // let _ = socket.send(Message::Text(format!("connected"))).await;
+
+  let (mut sender, mut receiver) = socket.split();
+
+  let mut tx = None::<broadcast::Sender<String>>;
+  let mut roomid = String::new();
+  // let mut channel = String::new();
+
+  while let Some(Ok(msg)) = receiver.next().await {
+    if let Message::Text(msg) = msg {
+      println!("msg, {:?}", msg);
+
+      #[derive(Deserialize)]
+      struct Connect {
+        roomid: String,
+      }
+
+      let connect: Connect = match serde_json::from_str(&msg) {
+        Ok(connect) => connect,
+        Err(error) => {
+          tracing::error!(%error);
+          let _ = sender
+            .send(Message::Text(String::from(
+              "Failed to parse connect message",
+            )))
+            .await;
+          break;
+        }
+      };
+      // when user joins room, just add another entry to the state, just like below and then send a emit on the client, see if message is only recieved in that socket.
+
+      {
+        let mut rooms = state.rooms.lock().unwrap();
+
+        roomid = connect.roomid.clone();
+        let room = rooms.entry(connect.roomid).or_insert_with(RoomState::new);
+
+        tx = Some(room.tx.clone());
+
+        if !room.user_set.contains(&user.id) {
+          room.user_set.insert(user.id);
+        }
+      }
+
+      if tx.is_some() {
+        break;
+      } else {
+        let _ = sender
+          .send(Message::Text(String::from("Username already in room.")))
+          .await;
+
+        return;
+      }
+    }
+  }
+
+  let tx = tx.unwrap();
+
+  let mut rx: broadcast::Receiver<String> = tx.subscribe();
+
+  // Send joined message to all subscribers.
+  let msg = format!("{} joined {}.", user.username, roomid);
+  tracing::debug!("{}", msg);
+  let _ = tx.send(msg);
+
+  let send_roomid = roomid.clone();
+  let mut send_task = tokio::spawn(async move {
+    while let Ok(msg) = rx.recv().await {
+      println!("[{}:send]: {:?}", send_roomid, msg);
+      // In any websocket error, break loop.
+      if sender.send(Message::Text(msg)).await.is_err() {
+        break;
+      }
+    }
+  });
+
+  let mut recv_task = {
+    // Clone things we want to pass to the receiving task.
+    let tx: broadcast::Sender<String> = tx.clone();
+    let name = user.username.clone();
+    let roomid = roomid.clone();
+    let recv_pool = state.pool.clone();
+
+    // This task will receive messages from client and send them to broadcast subscribers.
+    tokio::spawn(async move {
+      while let Some(Ok(Message::Text(text))) = receiver.next().await {
+        println!("[{}:recv]: {:?}", roomid, text);
+
+        let packets: Games = match serde_json::from_str(&text) {
+          Ok(msg) => msg,
+          Err(er) => {
+            println!("{:?}", er);
+            break;
+          }
+        };
+
+        println!("packets {:?}", packets);
+
+        match packets {
+          Games::GetGames => {
             let games =
               battleship::get_games_by_state(&recv_pool, CONSTANTS.awaiting.to_string()).await;
 
@@ -229,11 +366,11 @@ pub async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user: user::
 pub struct CreateGame {
   stake: i64,
 }
-impl IntoResponse for CreateGame {
-  fn into_response(self) -> Response {
-    Json(json!(&self)).into_response()
-  }
-}
+// impl IntoResponse for CreateGame {
+//   fn into_response(self) -> Response {
+//     Json(json!(&self)).into_response()
+//   }
+// }
 
 pub async fn create(
   State(state): State<Arc<AppState>>,
@@ -307,6 +444,19 @@ pub async fn create(
     )
   })?;
 
+  {
+    let mut rooms = state.rooms.lock().unwrap();
+    let roomid = "games".to_string();
+    println!("{:?}", rooms.get_mut(&roomid).unwrap());
+    let _ = rooms.get_mut(&roomid).unwrap().tx.send(
+      serde_json::to_string(&SocketMessage::<String> {
+        r#type: "game-created".to_string(),
+        data: None,
+      })
+      .unwrap(),
+    );
+  }
+
   Ok((
     StatusCode::OK,
     Json(CreateGameResponse {
@@ -318,11 +468,6 @@ pub async fn create(
 #[derive(Serialize, Deserialize)]
 pub struct JoinGame {
   pub gameid: String,
-}
-impl IntoResponse for JoinGame {
-  fn into_response(self) -> Response {
-    Json(json!(&self)).into_response()
-  }
 }
 
 pub async fn join_game(
@@ -431,16 +576,11 @@ pub struct BattleshipsGame {
   pub clicks: Vec<i64>,
 }
 
-impl IntoResponse for BattleshipsGame {
-  fn into_response(self) -> Response {
-    Json(json!(&self)).into_response()
-  }
-}
 
 pub async fn get_latest(
   State(state): State<Arc<AppState>>,
   Extension(user): Extension<user::User>,
-) -> Result<(StatusCode, BattleshipsGame), (StatusCode, Json<ErrorMessage>)> {
+) -> Result<(StatusCode, Json<BattleshipsGame>), (StatusCode, Json<ErrorMessage>)> {
   let game = battleship::get_game_by_user_id(&state.pool, user.id)
     .await
     .map_err(|_| {
@@ -480,7 +620,7 @@ pub async fn get_latest(
     // STATE: waiting for player to join
     return Ok((
       StatusCode::OK,
-      BattleshipsGame {
+      Json(BattleshipsGame {
         id: game.id.to_string(),
         belongs_to: belongs_to_username,
         state: game.state,
@@ -492,7 +632,7 @@ pub async fn get_latest(
         clicks: Vec::new(),
         ships: Vec::new(),
         turn: game.turn.to_string(),
-      },
+      }),
     ));
   }
 
@@ -586,7 +726,7 @@ pub async fn get_latest(
     // STATE: game is finished
     return Ok((
       StatusCode::OK,
-      BattleshipsGame {
+      Json(BattleshipsGame {
         id: game.id.to_string(),
         state: game.state,
         belongs_to: belongs_to_username,
@@ -608,14 +748,14 @@ pub async fn get_latest(
         },
         ships: ships,
         turn: game.turn.to_string(),
-      },
+      }),
     ));
   }
 
   // STATE: game is playing
   Ok((
     StatusCode::OK,
-    BattleshipsGame {
+    Json(BattleshipsGame {
       id: game.id.to_string(),
       state: game.state,
       belongs_to: belongs_to_username,
@@ -637,7 +777,7 @@ pub async fn get_latest(
       },
       ships: ships,
       turn: game.turn.to_string(),
-    },
+    }),
   ))
 }
 
