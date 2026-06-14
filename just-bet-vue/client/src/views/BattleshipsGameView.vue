@@ -11,6 +11,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSocket } from '@/composable/useSocket'
 import { useGameStore } from '@/stores/useGameStore'
 import { storeToRefs } from 'pinia'
+import { prettify } from '@/services/prettify'
 
 const authStore = useAuthStore()
 const gameStore = useGameStore()
@@ -197,7 +198,7 @@ const userHasClicked = (id: number) => {
 const userHasClickedBoat = (id: number) => {
   if (!data.value) return false
   for (const key of Object.keys(data.value.clicks)) {
-    if (data.value.clicks[key][0] && Number(key) === id) {
+    if (data.value.clicks[key] && Number(key) === id) {
       return true
     }
   }
@@ -218,7 +219,7 @@ const handleBoardClick = (id: number) => {
   if (!data.value) return
   if (!data.value.turn || data.value.state === 'done') return
 
-  socket.emit('board-click', { id: data.value.id, clickNumber: id, token: authStore.token })
+  socket.emit('board-click', { id: data.value.id, click_position: id })
 }
 
 const readyUp = () => {
@@ -254,6 +255,28 @@ socket.on('user-joined', async ({ data: { gameid } }) => {
 })
 
 socket.on('user-ready', async ({ data: { gameid } }) => {
+  const { get } = useApi(`/api/game/battleships/${gameid}`)
+
+  get().then((response) => {
+    battleship.value.game = response
+  })
+})
+
+socket.on('user-has-won', async ({ data: { gameid } }) => {
+  const authStore = useAuthStore()
+  const { get } = useApi('/api/get-balance')
+  get().then((res: { balance: number }) => {
+    authStore.balance = res.balance
+  })
+
+  const { get: getGame } = useApi(`/api/game/battleships/${gameid}`)
+
+  getGame().then((response) => {
+    battleship.value.game = response
+  })
+})
+
+socket.on('board-click', async ({ data: { gameid } }) => {
   const { get } = useApi(`/api/game/battleships/${gameid}`)
 
   get().then((response) => {
@@ -329,7 +352,7 @@ socket.on('user-ready', async ({ data: { gameid } }) => {
           lose: data.winner !== authStore.username
         }"
       >
-        {{ data.winner === authStore.username ? 'You won' : 'You lost' }} ${{ data.pool }}
+        {{ data.winner === authStore.username ? 'You won' : 'You lost' }} ${{ prettify(data.pool) }}
       </p>
     </div>
     <section ref="fleet" class="fleet"></section>

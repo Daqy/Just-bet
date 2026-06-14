@@ -20,6 +20,11 @@ export const useSocket = (URL: string, room: String) => {
 
   socket.value.onclose = (event) => {
     connected.value = false
+    console.log('disconnected')
+  }
+
+  socket.value.onerror = (event) => {
+    console.log('error')
   }
 
   const emit = (type: string, data?: Record<string, unknown>, attempt = 10) => {
