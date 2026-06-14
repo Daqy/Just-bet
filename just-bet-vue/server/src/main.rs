@@ -83,6 +83,7 @@ async fn main() -> Result<(), anyhow::Error> {
       "/game/minesweeper/:id/click",
       routing::get(minesweeper::click),
     )
+    .route("/game/battleships/:id", routing::get(battleship::get))
     .route(
       "/battleships/latest-game",
       routing::get(battleship::get_latest),

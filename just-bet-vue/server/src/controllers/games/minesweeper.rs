@@ -293,7 +293,7 @@ pub async fn create(
 
 #[derive(Deserialize, Debug)]
 pub struct GameParameters {
-  pub id: Option<i64>,
+  pub id: Option<String>,
 }
 
 pub async fn get(
@@ -301,14 +301,23 @@ pub async fn get(
   Extension(user): Extension<user::User>,
   Path(params): Path<GameParameters>,
 ) -> Result<(StatusCode, MinesweeperGame), (StatusCode, Json<ErrorMessage>)> {
-  // for (key, value) in &params {}
-
-  let id = params.id.ok_or((
-    StatusCode::FORBIDDEN,
-    Json(ErrorMessage {
-      msg: "Game ID must be provided".to_string(),
-    }),
-  ))?;
+  let id: i64 = params
+    .id
+    .ok_or((
+      StatusCode::FORBIDDEN,
+      Json(ErrorMessage {
+        msg: "Game ID must be provided".to_string(),
+      }),
+    ))?
+    .parse::<i64>()
+    .map_err(|_| {
+      (
+        StatusCode::FORBIDDEN,
+        Json(ErrorMessage {
+          msg: "id must be a valid number".to_string(),
+        }),
+      )
+    })?;
 
   let game = minesweeper::get_game_by_id(&state.pool, id)
     .await
@@ -501,12 +510,23 @@ pub async fn click(
   Path(params): Path<GameParameters>,
   query: Query<ClickQuery>,
 ) -> Result<(StatusCode, MinesweeperGame), (StatusCode, Json<ErrorMessage>)> {
-  let id = params.id.ok_or((
-    StatusCode::FORBIDDEN,
-    Json(ErrorMessage {
-      msg: "Game ID must be provided".to_string(),
-    }),
-  ))?;
+  let id: i64 = params
+    .id
+    .ok_or((
+      StatusCode::FORBIDDEN,
+      Json(ErrorMessage {
+        msg: "Game ID must be provided".to_string(),
+      }),
+    ))?
+    .parse::<i64>()
+    .map_err(|_| {
+      (
+        StatusCode::FORBIDDEN,
+        Json(ErrorMessage {
+          msg: "id must be a valid number".to_string(),
+        }),
+      )
+    })?;
 
   let click_position = query.click_position.ok_or((
     StatusCode::FORBIDDEN,
