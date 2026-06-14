@@ -20,6 +20,7 @@ diesel::table! {
         id -> Int8,
         belongs_to -> Int8,
         clicked_by -> Int8,
+        boat_hit -> Bool,
         position -> Int8,
     }
 }

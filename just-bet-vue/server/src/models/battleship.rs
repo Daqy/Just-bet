@@ -35,6 +35,7 @@ pub struct BattleshipClicks {
   pub belongs_to: i64,
   pub position: i64,
   pub clicked_by: i64,
+  pub boat_hit: bool,
 }
 
 #[derive(Identifiable, Debug, Queryable, Selectable)]
@@ -190,6 +191,7 @@ pub struct SetGame<'a> {
   pub pool: Option<PgMoney>,
   pub turn: Option<i64>,
   pub opponent: Option<i64>,
+  pub winner: Option<i64>,
 }
 
 pub struct UpdateGame {
@@ -197,6 +199,7 @@ pub struct UpdateGame {
   pub pool: Option<PgMoney>,
   pub turn: Option<i64>,
   pub opponent: Option<i64>,
+  pub winner: Option<i64>,
 }
 
 pub async fn update_game(
@@ -212,6 +215,7 @@ pub async fn update_game(
         turn: game.turn,
         pool: game.pool,
         opponent: game.opponent,
+        winner: game.winner,
       })
       .returning(Battleship::as_returning())
       .get_results(&mut pool.get().await.unwrap())
@@ -240,6 +244,29 @@ pub async fn create_ships(
     diesel::insert_into(battleship_ships::table)
       .values(ships)
       .returning(BattleshipShips::as_returning())
+      .get_results(&mut pool.get().await.unwrap())
+      .await?,
+  )
+}
+
+#[derive(Insertable)]
+#[diesel(table_name = battleship_clicks)]
+pub struct CreateClick {
+  pub id: i64,
+  pub belongs_to: i64,
+  pub clicked_by: i64,
+  pub position: i64,
+  pub boat_hit: Option<bool>,
+}
+
+pub async fn create_clicks(
+  pool: &Pool<AsyncPgConnection>,
+  click: &CreateClick,
+) -> Result<Vec<BattleshipClicks>, diesel::result::Error> {
+  Ok(
+    diesel::insert_into(battleship_clicks::table)
+      .values(click)
+      .returning(BattleshipClicks::as_returning())
       .get_results(&mut pool.get().await.unwrap())
       .await?,
   )

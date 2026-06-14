@@ -25,7 +25,7 @@ use crate::{
     user::ErrorMessage,
   },
   models::{
-    battleship::{self, Battleship, CreateShip, UpdateGame},
+    battleship::{self, Battleship, CreateClick, CreateShip, UpdateGame},
     user,
   },
 };
@@ -50,21 +50,37 @@ pub async fn games(
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct BattleshipsGame {
+  pub id: String,
+  pub belongs_to: String,
+  pub state: String,
+  pub winner: Option<String>,
+  pub turn: bool,
+  pub stake: i64,
+  pub pool: i64,
+  pub ready: bool,
+  pub opponent: Option<BattleshipOpponent>,
+  pub ships: HashMap<String, Vec<i64>>,
+  pub clicks: HashMap<i64, bool>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 struct SocketMessage<T> {
   r#type: String,
   data: Option<T>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct JoinRoomPackets {
+struct BoardClickData {
   id: String,
+  click_position: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
 enum Packets {
-  #[serde(rename = "join-game")]
-  JoinGame { data: JoinRoomPackets },
+  #[serde(rename = "board-click")]
+  BoardClick { data: BoardClickData },
 }
 
 pub async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user: user::User) {
@@ -167,7 +183,149 @@ pub async fn handle_socket(socket: WebSocket, state: Arc<AppState>, user: user::
         println!("packets {:?}", packets);
 
         match packets {
-          Packets::JoinGame { data } => {}
+          Packets::BoardClick { data } => {
+            let id = data.id.parse::<i64>().unwrap();
+
+            let game = battleship::get_game_by_id(&recv_pool, id).await;
+
+            let game = match game {
+              Ok(game) => match game {
+                Some(game) => game,
+                None => continue,
+              },
+              Err(_) => continue,
+            };
+
+            if user.id != game.belongs_to && game.opponent.is_some_and(|id| id != user.id) {
+              continue;
+            }
+
+            let clicks =
+              battleship::get_clicks_by_user_and_game(&recv_pool, user.id, game.id).await;
+
+            let mut clicks: Vec<i64> = match clicks {
+              Ok(clicks) => match clicks {
+                Some(clicks) => clicks,
+                None => Vec::new(),
+              },
+              Err(_) => continue,
+            }
+            .iter()
+            .map(|click| click.position)
+            .collect();
+
+            if clicks.contains(&data.click_position) {
+              continue;
+            }
+
+            let opponent_id = if user.id == game.belongs_to {
+              game.opponent
+            } else {
+              Some(game.belongs_to)
+            }
+            .unwrap();
+
+            let ships =
+              battleship::get_ships_by_user_and_game(&recv_pool, opponent_id, game.id).await;
+
+            let ships = match ships {
+              Ok(ships) => match ships {
+                Some(ships) => covert_ships(&ships),
+                None => HashMap::new(),
+              },
+              Err(_) => continue,
+            };
+
+            let mut generator = Generator::new(0);
+
+            // add click
+            let _ = battleship::create_clicks(
+              &recv_pool,
+              &CreateClick {
+                id: generator.generate(),
+                belongs_to: game.id,
+                clicked_by: user.id,
+                position: data.click_position,
+                boat_hit: if ships
+                  .iter()
+                  .any(|(_, ship)| ship.contains(&data.click_position))
+                {
+                  Some(true)
+                } else {
+                  None
+                },
+              },
+            )
+            .await;
+
+            clicks.push(data.click_position);
+
+            let mut blown_up_ships: i64 = 0;
+
+            for (_, ship) in ships {
+              let mut number_of_hits = ship.clone();
+
+              number_of_hits.retain(|pos| clicks.contains(pos));
+
+              println!("{:?}", number_of_hits.len());
+
+              if number_of_hits.len() == ship.len() {
+                blown_up_ships = blown_up_ships + 1;
+              }
+            }
+
+            if blown_up_ships == CONSTANTS.number_of_ships {
+              // user has won
+              let _ = battleship::update_game(
+                &recv_pool,
+                game.id,
+                &UpdateGame {
+                  state: Some(CONSTANTS.done.to_string()),
+                  pool: None,
+                  turn: None,
+                  opponent: None,
+                  winner: Some(user.id),
+                },
+              )
+              .await;
+              let _ =
+                user::update_balance(&recv_pool, user.id, Some(game.pool + user.balance)).await;
+
+              let _ = tx.send(
+                serde_json::to_string(&SocketMessage {
+                  r#type: "user-has-won".to_string(),
+                  data: Some(CreateGameResponse {
+                    gameid: game.id.to_string(),
+                  }),
+                })
+                .unwrap(),
+              );
+              continue;
+            }
+
+            let _ = battleship::update_game(
+              &recv_pool,
+              game.id,
+              &UpdateGame {
+                state: None,
+                pool: None,
+                turn: Some(opponent_id),
+                opponent: None,
+                winner: None,
+              },
+            )
+            .await;
+
+            let _ = tx.send(
+              serde_json::to_string(&SocketMessage {
+                r#type: "board-click".to_string(),
+                data: Some(CreateGameResponse {
+                  gameid: game.id.to_string(),
+                }),
+              })
+              .unwrap(),
+            );
+          }
           _ => {
             let _ = tx.send(format!("{}: {}", name, text));
           }
@@ -328,7 +486,7 @@ pub async fn handle_game_socket(socket: WebSocket, state: Arc<AppState>, user: u
                 ready: false,
                 winner: None,
                 opponent: None,
-                clicks: Vec::new(),
+                clicks: HashMap::new(),
                 ships: HashMap::new(),
                 turn: game.turn == user.id,
               })
@@ -518,6 +676,7 @@ pub async fn join_game(
         Some(game.belongs_to)
       },
       opponent: Some(user.id),
+      winner: None,
     },
   )
   .await
@@ -566,7 +725,7 @@ pub async fn join_game(
 pub struct BattleshipOpponent {
   ready: bool,
   ships: Option<HashMap<String, Vec<i64>>>,
-  clicks: Vec<i64>,
+  clicks: HashMap<i64, bool>,
 }
 
 fn covert_ships(ships: &Vec<battleship::BattleshipShips>) -> HashMap<String, Vec<i64>> {
@@ -585,21 +744,6 @@ fn covert_ships(ships: &Vec<battleship::BattleshipShips>) -> HashMap<String, Vec
     );
   }
   converted_ships
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct BattleshipsGame {
-  pub id: String,
-  pub belongs_to: String,
-  pub state: String,
-  pub winner: Option<String>,
-  pub turn: bool,
-  pub stake: i64,
-  pub pool: i64,
-  pub ready: bool,
-  pub opponent: Option<BattleshipOpponent>,
-  pub ships: HashMap<String, Vec<i64>>,
-  pub clicks: Vec<i64>,
 }
 
 pub async fn get_latest(
@@ -654,7 +798,7 @@ pub async fn get_latest(
         ready: false,
         winner: None,
         opponent: None,
-        clicks: Vec::new(),
+        clicks: HashMap::new(),
         ships: HashMap::new(),
         turn: game.turn == user.id,
       }),
@@ -756,13 +900,23 @@ pub async fn get_latest(
           ready: opponent_ships.len() as i64 == CONSTANTS.number_of_ships,
           ships: Some(covert_ships(&opponent_ships)),
           clicks: match opponent_clicks {
-            Some(value) => value.iter().map(|click| click.position).collect(),
-            None => Vec::new(),
+            Some(value) => HashMap::from_iter(
+              value
+                .iter()
+                .map(|click| (click.position, click.boat_hit))
+                .collect::<Vec<(i64, bool)>>(),
+            ),
+            None => HashMap::new(),
           },
         }),
         clicks: match clicks {
-          Some(value) => value.iter().map(|click| click.position).collect(),
-          None => Vec::new(),
+          Some(value) => HashMap::from_iter(
+            value
+              .iter()
+              .map(|click| (click.position, click.boat_hit))
+              .collect::<Vec<(i64, bool)>>(),
+          ),
+          None => HashMap::new(),
         },
         ships: covert_ships(&ships),
         turn: game.turn == user.id,
@@ -785,13 +939,23 @@ pub async fn get_latest(
         ready: opponent_ships.len() as i64 == CONSTANTS.number_of_ships,
         ships: None,
         clicks: match opponent_clicks {
-          Some(value) => value.iter().map(|click| click.position).collect(),
-          None => Vec::new(),
+          Some(value) => HashMap::from_iter(
+            value
+              .iter()
+              .map(|click| (click.position, click.boat_hit))
+              .collect::<Vec<(i64, bool)>>(),
+          ),
+          None => HashMap::new(),
         },
       }),
       clicks: match clicks {
-        Some(value) => value.iter().map(|click| click.position).collect(),
-        None => Vec::new(),
+        Some(value) => HashMap::from_iter(
+          value
+            .iter()
+            .map(|click| (click.position, click.boat_hit))
+            .collect::<Vec<(i64, bool)>>(),
+        ),
+        None => HashMap::new(),
       },
       ships: covert_ships(&ships),
       turn: game.turn == user.id,
@@ -948,6 +1112,7 @@ pub async fn confirm_placement(
         pool: None,
         turn: None,
         opponent: None,
+        winner: None,
       },
     )
     .await
@@ -1045,7 +1210,7 @@ pub async fn get(
         ready: false,
         winner: None,
         opponent: None,
-        clicks: Vec::new(),
+        clicks: HashMap::new(),
         ships: HashMap::new(),
         turn: game.turn == user.id,
       }),
@@ -1147,13 +1312,23 @@ pub async fn get(
           ready: opponent_ships.len() as i64 == CONSTANTS.number_of_ships,
           ships: Some(covert_ships(&opponent_ships)),
           clicks: match opponent_clicks {
-            Some(value) => value.iter().map(|click| click.position).collect(),
-            None => Vec::new(),
+            Some(value) => HashMap::<i64, bool>::from_iter(
+              value
+                .iter()
+                .map(|click| (click.position, click.boat_hit))
+                .collect::<Vec<(i64, bool)>>(),
+            ),
+            None => HashMap::new(),
           },
         }),
         clicks: match clicks {
-          Some(value) => value.iter().map(|click| click.position).collect(),
-          None => Vec::new(),
+          Some(value) => HashMap::from_iter(
+            value
+              .iter()
+              .map(|click| (click.position, click.boat_hit))
+              .collect::<Vec<(i64, bool)>>(),
+          ),
+          None => HashMap::new(),
         },
         ships: covert_ships(&ships),
         turn: game.turn == user.id,
@@ -1176,13 +1351,23 @@ pub async fn get(
         ready: opponent_ships.len() as i64 == CONSTANTS.number_of_ships,
         ships: None,
         clicks: match opponent_clicks {
-          Some(value) => value.iter().map(|click| click.position).collect(),
-          None => Vec::new(),
+          Some(value) => HashMap::from_iter(
+            value
+              .iter()
+              .map(|click| (click.position, click.boat_hit))
+              .collect::<Vec<(i64, bool)>>(),
+          ),
+          None => HashMap::new(),
         },
       }),
       clicks: match clicks {
-        Some(value) => value.iter().map(|click| click.position).collect(),
-        None => Vec::new(),
+        Some(value) => HashMap::from_iter(
+          value
+            .iter()
+            .map(|click| (click.position, click.boat_hit))
+            .collect::<Vec<(i64, bool)>>(),
+        ),
+        None => HashMap::new(),
       },
       ships: covert_ships(&ships),
       turn: game.turn == user.id,
