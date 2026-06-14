@@ -244,6 +244,22 @@ watch(
     }
   }
 )
+
+socket.on('user-joined', async ({ data: { gameid } }) => {
+  const { get } = useApi(`/api/game/battleships/${gameid}`)
+
+  get().then((response) => {
+    battleship.value.game = response
+  })
+})
+
+socket.on('user-ready', async ({ data: { gameid } }) => {
+  const { get } = useApi(`/api/game/battleships/${gameid}`)
+
+  get().then((response) => {
+    battleship.value.game = response
+  })
+})
 </script>
 
 <template>

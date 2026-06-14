@@ -49,7 +49,6 @@ export const useSocket = (URL: string, room: String) => {
     } catch (err) {
       data = event.data
     }
-    console.log(onMessageHandlers.value)
     if (!onMessageHandlers.value[data.type]) return
 
     onMessageHandlers.value[data.type](data, event, ...args)
