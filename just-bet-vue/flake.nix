@@ -53,7 +53,7 @@
           cargoLock.lockFile = ./server/Cargo.lock;
 
           postInstall = ''
-            cp -r ${client}/lib/node_modules/client/dist $out/bin/client
+            cp -r ${client}/dist $out/bin/client
           '';
 
           buildInputs = [
@@ -79,6 +79,7 @@
       in {
         options.services.justBet = {
           enable = mkEnableOption description;
+
 
           port = mkOption {
             type = types.nullOr types.ints.u16;
