@@ -2,8 +2,38 @@
 import { Icons } from '~components/icons'
 import { useGameStore } from '~stores/useGameStore'
 import { prettify } from '@/services/prettify'
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 
 const gameStore = useGameStore()
+const { game } = storeToRefs(gameStore)
+
+function getPercentageOfWining(size, nextClickCount, bombCount) {
+  let total = 1
+  for (let index = 0; index < nextClickCount; index++) {
+    total *= (size - bombCount - index) / (size - index)
+  }
+  return total
+}
+
+const nextClick = computed(() => {
+  if (!game.value?.size) {
+    return 0
+  }
+  const chanceOFWinning = getPercentageOfWining(
+    game.value.size,
+    game.value.clicks.length,
+    game.value.bomb.count
+  )
+  const pool = (1 / chanceOFWinning) * game.value.stake // 25
+  const potentialChance = getPercentageOfWining(
+    game.value.size,
+    game.value.clicks.length + 1,
+    game.value.bomb.count
+  )
+
+  return (1 / potentialChance) * game.value.stake - pool
+})
 </script>
 
 <template>
@@ -16,19 +46,19 @@ const gameStore = useGameStore()
           secondaryFill="var(--color-container-titles)"
         />
       </div>
-      <p>{{ prettify(gameStore.game?.stake) }}</p>
+      <p>{{ prettify(game?.stake) }}</p>
     </div>
     <div class="information-container" title="Bomb Count">
       <div class="svg-container">
         <component :is="Icons.minesweeper" fill="var(--color-text-subtle)" />
       </div>
-      <p>{{ gameStore.game?.bomb.count || 0 }}</p>
+      <p>{{ game?.bomb?.count || 0 }}</p>
     </div>
     <div class="information-container" title="Earn per click">
       <div class="svg-container">
         <component :is="Icons.mouseclick" fill="var(--color-text-subtle)" />
       </div>
-      <p>{{ prettify(gameStore.game?.nextClick) }}</p>
+      <p>{{ prettify(nextClick) }}</p>
     </div>
   </div>
 </template>

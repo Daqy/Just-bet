@@ -11,20 +11,19 @@ import { computed, watch } from 'vue'
 import { useAuthStore } from '~stores/useAuthStore'
 import { useApi } from '~services/api'
 import { routerPathPrettify } from '@/services/routerPathPrettify'
-import { socket } from '@/socket'
+import { storeToRefs } from 'pinia'
 const { loading, get } = useApi('/api/get-user')
 
-socket.connect()
-
 const authStore = useAuthStore()
+const { username, balance, token } = storeToRefs(authStore)
 
 watch(
-  () => authStore.token,
-  (to, from) => {
+  () => token.value,
+  () => {
     get().then((response: { username: string; balance: number }) => {
       if (response) {
-        authStore.username = response.username
-        authStore.balance = response.balance
+        username.value = response.username
+        balance.value = response.balance
       }
     })
   }
@@ -41,18 +40,18 @@ const heading = computed(() => {
   <div class="container">
     <div class="top-container">
       <AppLogo title="Just bet" />
-      <AppClaim v-if="authStore.token" />
+      <AppClaim v-if="token" />
     </div>
     <AppCard :heading="heading">
       <template #icon>
         <component :is="Icons[heading.toLowerCase()]" />
       </template>
-      <template #extra v-if="authStore.token">
+      <template #extra v-if="balance">
         <AppBalance :loading="loading" />
       </template>
       <RouterView />
     </AppCard>
-    <footer v-if="authStore.token">
+    <footer v-if="token">
       <AppFooter :loading="loading" />
     </footer>
   </div>

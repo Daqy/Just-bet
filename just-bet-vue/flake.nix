@@ -1,0 +1,146 @@
+{
+  description = "Just-bet";
+
+  inputs = {
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
+  };
+
+  outputs = {
+    self,
+    nixpkgs,
+    rust-overlay
+  }: let
+    supportedSystems = ["x86_64-linux"];
+    forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+  in {
+    packages = forAllSystems (
+      system: let
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [
+          rust-overlay.overlays.default
+        ];
+      };
+
+      rustToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
+        toolchain.minimal 
+      );
+
+      rustPlatform = pkgs.makeRustPlatform {
+        cargo = rustToolchain;
+        rustc = rustToolchain;
+      };
+
+      client = pkgs.buildNpmPackage {
+        pname = "client";
+        version = "0.0.0";
+
+        src = ./client/.;
+        npmDeps = pkgs.importNpmLock {
+          npmRoot = ./client/.;
+        };
+
+        npmConfigHook = pkgs.importNpmLock.npmConfigHook;
+      };
+      in {
+        default = rustPlatform.buildRustPackage {
+          pname = "server";
+          version = "0.0.0";
+
+          src = nixpkgs.lib.cleanSource ./server/.;
+          cargoLock.lockFile = ./server/Cargo.lock;
+
+          postInstall = ''
+            cp -r ${client}/lib/node_modules/just-bet/dist $out/bin/client
+          '';
+
+          buildInputs = [
+            pkgs.libpq
+          ];
+        };
+
+      }
+    );
+
+    nixosModules.default = {
+      config,
+      lib,
+      pkgs,
+      utils,
+      ...
+    }:
+      with lib; let
+        description = "Non-commerical gambling";
+        cfg = config.services.justBet;
+        runtimeFilesDir = "/var/run/just-bet";
+        socketPath = "${runtimeFilesDir}/http.sock";
+      in {
+        options.services.justBet = {
+          enable = mkEnableOption description;
+          
+
+          port = mkOption {
+            type = types.nullOr types.ints.u16;
+            default = null;
+            description = "Accept HTTP requests on the specified TCP port";
+          };
+        };
+
+        configFile =
+            pkgs.writeText ".env"
+            ''
+              DATABASE_URL=postgres://just-bet:123@/just-bet?host=/tmp
+
+              DB_HOST=localhost
+              DB_PORT=5432
+              DB_NAME=just-bet
+              DB_USER=just-bet
+              DB_PASSWORD=123
+
+              DEBUG_FORWARD_HOST=localhost
+              DEBUG_FORWARD_PORT=8602
+            '';
+
+        config = mkIf cfg.enable {
+          systemd = {
+            services.just-bet = {
+              inherit description;
+              wantedBy = ["multi-user.target"];
+
+              serviceConfig = {
+                ExecStart = utils.escapeSystemdExecArgs (
+                  ["--http-port" cfg.httpPort]
+                );
+
+                Restart = "always";
+                Type = "exec";
+              };
+            };
+          };
+          services.postgresql = {
+              enable = true;
+
+              enableTCPIP = true;
+              settings.port = 5432;
+
+              ensureDatabases = ["just-bet"];
+
+              ensureUsers = [
+                {
+                  name = "just-bet";
+                  ensureDBOwnership = true;
+                }
+              ];
+
+              authentication = ''
+                # type database DBuser origin-address auth-method
+                host just-bet just-bet localhost trust
+              '';
+            };
+        };
+      };
+  };
+}
+

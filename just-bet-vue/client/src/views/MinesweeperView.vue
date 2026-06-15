@@ -48,7 +48,7 @@ function squareClick(id: number, addToQueue = true) {
   )
     return
 
-  const { get } = useApi(`/api/game/minesweeper/${gameStore.game._id}/click?clickPosition=${id}`)
+  const { get } = useApi(`/api/game/minesweeper/${gameStore.game.id}/click?click_position=${id}`)
   console.log(queue, id)
   if (queue.length > 1 && queue[0] !== id) {
     return
@@ -65,7 +65,7 @@ function squareClick(id: number, addToQueue = true) {
         if (response.state === 'done') {
           gameStore.game = { ...gameStore.game, ...response }
 
-          const { get } = useApi(`/api/game/${gameStore.game._id}/bomb-locations`)
+          const { get } = useApi(`/api/game/${gameStore.game.id}/bomb-locations`)
           get().then(async (res: number[]) => {
             gameStore.game.bomb.position = []
 
@@ -98,18 +98,12 @@ function squareClick(id: number, addToQueue = true) {
 
 function claimRewards() {
   const { post } = useApi('/api/claim-game')
-  post({ gameid: gameStore.game._id }).then((response: any) => {
+  post({ gameid: gameStore.game.id }).then((response: any) => {
     gameStore.game = { ...gameStore.game, ...response }
-    const { get } = useApi(`/api/game/${response._id}/bomb-locations`)
-    get().then((res: any) => {
-      gameStore.game.bomb.position = res
+    const balanceUpdate = useApi('/api/get-balance')
+    balanceUpdate.get().then((res: { balance: number }) => {
+      authStore.balance = res.balance
     })
-    const balanceUpdate = useApi('/api/balance')
-    balanceUpdate
-      .post({ gameid: response._id, balance: response.pool })
-      .then((res: { balance: number }) => {
-        authStore.balance = res.balance
-      })
   })
 }
 </script>
@@ -155,7 +149,7 @@ function claimRewards() {
               v-if="gameStore.game?.state === 'done' && gameStore.game?.result === 'lost'"
               style="color: var(--color-bomb-background)"
             >
-              You lost a pontential: ${{ prettify(gameStore.game?.pool) }}
+              You lost: ${{ prettify(gameStore.game?.pool) }}
               <AppCopyGameOutput />
             </p>
             <AppSkeletonLoader v-if="!gameStore.game" height="100%" />

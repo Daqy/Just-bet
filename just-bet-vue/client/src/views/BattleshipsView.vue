@@ -1,21 +1,28 @@
 <script lang="ts" setup>
 import { useApi } from '@/services/api'
 import BattleshipControl from '@/components/battleships/battleshipsMainControls.vue'
-import { socket, state } from '@/socket'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { useSocket } from '@/composable/useSocket'
+import { prettify } from '@/services/prettify'
+import { useGameStore } from '@/stores/useGameStore'
+import { storeToRefs } from 'pinia'
 
 const authStore = useAuthStore()
+const gameStore = useGameStore()
 const router = useRouter()
-const latestGame = useApi('/api/latest-game?gameType=battleships')
+const latestGame = useApi('/api/battleships/latest-game')
 
-socket.emit('get-games')
+const { battleship } = storeToRefs(gameStore)
+const socket = useSocket('/ws/battleships/games', 'games')
+
+console.log(socket.$socket)
 
 latestGame
   .get()
   .then((response) => {
-    if (response.state !== 'done') {
-      router.push(`/battleships/${response._id}`)
+    if (response?.state !== 'done' && response.id) {
+      router.push(`/battleships/${response.id}`)
     }
   })
   .catch((error) => {})
@@ -27,28 +34,38 @@ const joinGame = (gameid) => {
     const balanceUpdate = useApi('/api/get-balance')
     balanceUpdate.get().then((res: { balance: number }) => {
       authStore.balance = res.balance
+      router.push(`/battleships/${response.gameid}`)
     })
-    router.push(`/battleships/${response.gameid}`)
   })
 }
+
+socket.emit('get-games')
+
+socket.on('get-games', (res) => {
+  battleship.value.games = res.data
+})
+
+socket.on('game-created', () => {
+  socket.emit('get-games')
+})
 </script>
 
 <template>
   <main class="game">
     <section class="player-games">
       <div class="container">
-        <template v-if="state.games.length > 0">
-          <div class="player-game" v-for="game in state.games" :key="game">
+        <template v-if="battleship.games.length > 0">
+          <div class="player-game" v-for="game in battleship.games" :key="game">
             <div class="icon"></div>
             <div>
               <h2 class="heading">Created by</h2>
-              <p>{{ game.belongsTo }}</p>
+              <p>{{ game.belongs_to }}</p>
             </div>
             <div>
               <h2 class="heading">Bet amount</h2>
-              <p>${{ game.stake }}</p>
+              <p>${{ prettify(game.stake) }}</p>
             </div>
-            <button class="button" @click="joinGame(game._id)">join</button>
+            <button class="button" @click="joinGame(game.id)">join</button>
           </div>
         </template>
         <div class="no-games" v-else>

@@ -3,6 +3,7 @@ import { useAuthStore } from '~stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { useApi } from '@/services/api'
 import AppSkeletonLoader from './AppSkeletonLoader.vue'
+import { storeToRefs } from 'pinia'
 
 const props = withDefaults(
   defineProps<{
@@ -14,6 +15,7 @@ const props = withDefaults(
 )
 
 const authStore = useAuthStore()
+const { username } = storeToRefs(authStore)
 const router = useRouter()
 
 function logout() {
@@ -21,18 +23,16 @@ function logout() {
 
   logout
     .post({ token: authStore.token })
-    .then((response: any) => {
-      if (response) {
-        authStore._reset()
-      }
+    .then(() => {
+      authStore._reset()
     })
     .finally(() => router.push({ name: 'login' }))
 }
 </script>
 
 <template>
-  <span v-if="!loading">
-    Username: {{ authStore.username }} | <button class="logout" @click="logout">logout</button>
+  <span v-if="!loading" class="center">
+    Username: {{ username }} | <button class="logout" @click="logout">logout</button>
   </span>
 
   <p class="copyright" v-if="!loading">© 2023 Daqy Develops & Co</p>
@@ -40,6 +40,10 @@ function logout() {
 </template>
 
 <style lang="scss" scoped>
+.center {
+  display: flex;
+  align-items: center;
+}
 /* footer {
   width: 100%;
   display: flex;

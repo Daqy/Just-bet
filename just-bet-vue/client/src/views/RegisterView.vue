@@ -237,7 +237,7 @@ function handleRegister() {
     }
 
     p {
-      nargin-bottom: 5px;
+      margin-bottom: 5px;
       color: var(--color-text-subtle);
     }
   }

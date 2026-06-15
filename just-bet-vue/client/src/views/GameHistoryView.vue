@@ -17,7 +17,7 @@ onMounted(() => {
 const currentGame = ref<number>(0)
 
 const games = computed(() => {
-  return data.value ? data.value.toReversed() : undefined
+  return data.value ? data.value : undefined
 })
 
 const bigDisplayGame = computed(() => {

@@ -9,7 +9,7 @@ const defaultValues = {
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(defaultValues.token)
+  const token = ref<string | null>(defaultValues.token)
   const username = ref(defaultValues.username)
   const balance = ref<number | null>(defaultValues.balance)
 
@@ -25,7 +25,7 @@ export const useAuthStore = defineStore('auth', () => {
     return new Promise((resolve, reject) => {
       post({ username, password })
         .then((response: { token: string }) => {
-          token.value = response.token
+          token.value = 'auth'
           resolve(true)
         })
         .catch((error) => {
@@ -40,7 +40,7 @@ export const useAuthStore = defineStore('auth', () => {
     return new Promise((resolve, reject) =>
       post({ token: token.value })
         .then((response: { token: string }) => {
-          token.value = response.token
+          token.value = 'auth'
           resolve(true)
         })
         .catch((error) => {

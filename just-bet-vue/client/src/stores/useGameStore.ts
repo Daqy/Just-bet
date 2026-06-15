@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
 import { defineStore } from 'pinia'
 import { useApi } from '@/services/api'
 
@@ -6,8 +6,14 @@ export const useGameStore = defineStore('game', () => {
   const game = ref(undefined)
   const loading = ref(false)
 
+  const battleship = reactive({
+    connected: false,
+    game: {},
+    games: []
+  })
+
   function getLatestGame() {
-    const latestGame = useApi('/api/latest-game?gameType=minesweeper')
+    const latestGame = useApi('/api/latest-game')
     loading.value = true
 
     latestGame.get().then((response: any) => {
@@ -25,5 +31,5 @@ export const useGameStore = defineStore('game', () => {
       game.value = response
     })
   }
-  return { game, loading, getLatestGame, getGame }
+  return { game, loading, battleship, getLatestGame, getGame }
 })
