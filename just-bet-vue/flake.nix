@@ -53,7 +53,7 @@
           cargoLock.lockFile = ./server/Cargo.lock;
 
           postInstall = ''
-            cp -r ${client}/ $out/bin/client
+            cp -r ${client}/lib/node_modules/just-bet/dist $out/bin/client
           '';
 
           buildInputs = [
@@ -79,7 +79,7 @@
       in {
         options.services.justBet = {
           enable = mkEnableOption description;
-
+          
 
           port = mkOption {
             type = types.nullOr types.ints.u16;
@@ -87,6 +87,21 @@
             description = "Accept HTTP requests on the specified TCP port";
           };
         };
+
+        configFile =
+            pkgs.writeText ".env"
+            ''
+              DATABASE_URL=postgres://just-bet:123@/just-bet?host=/tmp
+
+              DB_HOST=localhost
+              DB_PORT=5432
+              DB_NAME=just-bet
+              DB_USER=just-bet
+              DB_PASSWORD=123
+
+              DEBUG_FORWARD_HOST=localhost
+              DEBUG_FORWARD_PORT=8602
+            '';
 
         config = mkIf cfg.enable {
           systemd = {
@@ -104,6 +119,26 @@
               };
             };
           };
+          services.postgresql = {
+              enable = true;
+
+              enableTCPIP = true;
+              settings.port = 5432;
+
+              ensureDatabases = ["just-bet"];
+
+              ensureUsers = [
+                {
+                  name = "just-bet";
+                  ensureDBOwnership = true;
+                }
+              ];
+
+              authentication = ''
+                # type database DBuser origin-address auth-method
+                host just-bet just-bet localhost trust
+              '';
+            };
         };
       };
   };
