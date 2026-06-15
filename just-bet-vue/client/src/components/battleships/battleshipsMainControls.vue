@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import { useAuthStore } from '~stores/useAuthStore'
 import { useApi } from '@/services/api'
-import { socket, state } from '@/socket'
 import { useRouter } from 'vue-router'
 
 const authStore = useAuthStore()
