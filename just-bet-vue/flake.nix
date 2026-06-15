@@ -53,7 +53,7 @@
           cargoLock.lockFile = ./server/Cargo.lock;
 
           postInstall = ''
-            cp -r ${client}/dist $out/bin/client
+            cp -r ${client}/ $out/bin/client
           '';
 
           buildInputs = [
