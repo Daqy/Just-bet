@@ -55,7 +55,12 @@
           postInstall = ''
             cp -r ${client}/lib/node_modules/client/dist $out/bin/client
           '';
+
+          buildInputs = [
+            pkgs.libpq
+          ];
         };
+
       }
     );
 
