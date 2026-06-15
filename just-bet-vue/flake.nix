@@ -31,7 +31,6 @@
         rustc = rustToolchain;
       };
 
-      pkgs = nixpkgs.legacyPackages.${system};
       client = pkgs.buildNpmPackage {
         pname = "client";
         version = "0.0.0";
