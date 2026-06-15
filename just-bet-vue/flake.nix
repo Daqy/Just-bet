@@ -25,9 +25,8 @@
       };
 
       rustToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
-        toolchain.minimal {
-          targets = [buildTarget];
-        });
+        toolchain.minimal 
+      );
 
       rustPlatform = pkgs.makeRustPlatform {
         cargo = rustToolchain;
