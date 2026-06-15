@@ -17,7 +17,7 @@ function getPercentageOfWining(size, nextClickCount, bombCount) {
 }
 
 const nextClick = computed(() => {
-  if (!game.value) {
+  if (!game.value?.size) {
     return 0
   }
   const chanceOFWinning = getPercentageOfWining(
@@ -52,7 +52,7 @@ const nextClick = computed(() => {
       <div class="svg-container">
         <component :is="Icons.minesweeper" fill="var(--color-text-subtle)" />
       </div>
-      <p>{{ game?.bomb.count || 0 }}</p>
+      <p>{{ game?.bomb?.count || 0 }}</p>
     </div>
     <div class="information-container" title="Earn per click">
       <div class="svg-container">

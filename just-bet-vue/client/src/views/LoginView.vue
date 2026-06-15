@@ -30,26 +30,17 @@ async function handleLogin() {
   if (await authStore.login(email.value, password.value)) {
     router.push({ name: 'minesweeper' })
   }
-  // const { post } = useApi('/api/login')
-  // post({ username: email.value, password: password.value })
-  //   .then((response: { token: string }) => {
-  //     authStore.token = response.token
-  //   })
-  //   .finally(() => {
-  //     router.push({ name: 'minesweeper' })
-  //   })
 }
 </script>
 
 <template>
   <div class="container">
-    <section class="form">
+    <form @submit.prevent="handleLogin" class="form">
       <AppInput
         label-input="email"
-        type="email"
         text="Email"
         v-model="email"
-        placeholder="Enter your email..."
+        placeholder="Enter your email or username..."
         :showError="error?.includes('email')"
       ></AppInput>
 
@@ -63,8 +54,8 @@ async function handleLogin() {
       ></AppInput>
 
       <!-- <p v-if="error" class="error">{{ error }}</p> -->
-      <button class="login" @click="handleLogin">Login</button>
-    </section>
+      <button class="login" type="submit">Login</button>
+    </form>
     <section>
       <button class="register" @click="router.push({ name: 'register' })">Create an account</button>
     </section>
@@ -77,6 +68,7 @@ async function handleLogin() {
   width: 100%;
   height: 100%;
 
+  & > form,
   & > section {
     flex: 1;
     display: flex;
