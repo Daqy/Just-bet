@@ -14,20 +14,37 @@
   in {
     packages = forAllSystems (
       system: let
-        pkgs = nixpkgs.legacyPackages.${system};
-        client = pkgs.buildNpmPackage {
-          pname = "client";
-          version = "0.0.0";
+      pkgs = import nixpkgs {
+        inherit system;
+        overlays = [
+          rust-overlay.overlays.default
+        ];
+      };
 
-          src = ./client/.;
-          npmDeps = pkgs.importNpmLock {
-            npmRoot = ./client/.;
-          };
+      rustToolchain = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
+        toolchain.minimal {
+          targets = [buildTarget];
+        });
 
-          npmConfigHook = pkgs.importNpmLock.npmConfigHook;
+      rustPlatform = pkgs.makeRustPlatform {
+        cargo = rustToolchain;
+        rustc = rustToolchain;
+      };
+
+      pkgs = nixpkgs.legacyPackages.${system};
+      client = pkgs.buildNpmPackage {
+        pname = "client";
+        version = "0.0.0";
+
+        src = ./client/.;
+        npmDeps = pkgs.importNpmLock {
+          npmRoot = ./client/.;
         };
+
+        npmConfigHook = pkgs.importNpmLock.npmConfigHook;
+      };
       in {
-        default = pkgs.rustPlatform.buildRustPackage {
+        default = rustPlatform.buildRustPackage {
           pname = "server";
           version = "0.0.0";
 
