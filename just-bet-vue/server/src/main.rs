@@ -65,6 +65,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
   let auth_routes = Router::new()
     .route("/auth", routing::post(user::auth))
+    .route("/logout", routing::post(user::logout))
     .route("/get-user", routing::get(user::get))
     .route("/get-balance", routing::get(user::get_balance))
     .route("/get-claim", routing::get(user::get_claim))

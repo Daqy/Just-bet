@@ -9,7 +9,7 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
 use axum_extra::extract::CookieJar;
-use axum_extra::extract::cookie::Cookie;
+use axum_extra::extract::cookie::{Cookie, SameSite};
 
 use diesel::data_types::PgMoney;
 
@@ -92,20 +92,27 @@ pub async fn login(
       ..Default::default()
     },
     &Claims {
-      exp: Utc::now().timestamp() as usize,
+      exp: (Utc::now().naive_utc() + Duration::seconds(10))
+        .and_utc()
+        .timestamp() as usize,
     },
     &EncodingKey::from_secret("secret".as_ref()),
   )
   .unwrap();
 
   let cookie = Cookie::build(("token", token))
-    .path("/")
+    .path("/api")
     .secure(true)
     .http_only(true)
-    // .max_age(Duration::days(1))
+    .same_site(SameSite::Strict)
+    .max_age(time::Duration::seconds(Duration::days(1).num_seconds()))
     .build();
 
   Ok((StatusCode::OK, cookies.add(cookie)))
+}
+
+pub async fn logout(cookies: CookieJar) -> CookieJar {
+  cookies.remove("token")
 }
 
 #[derive(Serialize, Deserialize)]

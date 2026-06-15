@@ -7,7 +7,6 @@ use diesel::{
   query_builder::AsChangeset,
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl, pooled_connection::deadpool::Pool};
-use serde::Serialize;
 
 use crate::models::schema::{battleship, battleship_clicks, battleship_ships};
 
