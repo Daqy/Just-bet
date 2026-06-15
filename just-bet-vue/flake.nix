@@ -15,7 +15,7 @@
     packages = forAllSystems (
       system: let
         pkgs = nixpkgs.legacyPackages.${system};
-        frontend = pkgs.buildNpmPackage {
+        client = pkgs.buildNpmPackage {
           pname = "client";
           version = "0.0.0";
 
