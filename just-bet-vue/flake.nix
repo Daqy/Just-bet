@@ -3,11 +3,14 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = {
     self,
     nixpkgs,
+    rust-overlay
   }: let
     supportedSystems = ["x86_64-linux"];
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
